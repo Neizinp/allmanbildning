@@ -260,6 +260,71 @@ async function buildRainforests() {
   await writeFile("public/data/rainforests.geojson", JSON.stringify({ type: "FeatureCollection", features }));
 }
 
+async function sparql(query) {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch("https://query.wikidata.org/sparql", {
+      method: "POST",
+      headers: {
+        "User-Agent": "allmanbildning-build/0.1 (github.com/Neizinp/allmanbildning)",
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/sparql-results+json",
+      },
+      body: new URLSearchParams({ query }),
+    });
+    const text = await res.text();
+    try {
+      return JSON.parse(text).results.bindings.map((b) =>
+        Object.fromEntries(Object.entries(b).map(([k, v]) => [k, v.value])),
+      );
+    } catch {
+      if (attempt >= 2) throw new Error(`SPARQL-fel ${res.status}: ${text.slice(0, 400)}`);
+      await sleep(10000);
+    }
+  }
+}
+
+const parsePoint = (wkt) => {
+  const [lon, lat] = wkt.replace(/^Point\(|\)$/g, "").split(" ").map(Number);
+  return { lat: round(lat), lon: round(lon) };
+};
+
+// Hämtar punktobjekt som har svensk Wikipedia-artikel; sitelinks används som mått på hur känt objektet är.
+async function wikidataPlaces(pattern, minSitelinks, extra = "") {
+  const rows = await sparql(`
+    SELECT ?item (SAMPLE(?coord) AS ?pt) (SAMPLE(?title) AS ?ttl) (MAX(?sitelinks) AS ?links)
+           (SAMPLE(?countryLabel) AS ?cty) (MAX(?elev) AS ?ele) WHERE {
+      ${pattern}. ?item wdt:P625 ?coord; wikibase:sitelinks ?sitelinks.
+      FILTER(?sitelinks >= ${minSitelinks})
+      ?article schema:about ?item; schema:isPartOf <https://sv.wikipedia.org/>; schema:name ?title.
+      OPTIONAL { ?item wdt:P17 ?c. ?c rdfs:label ?countryLabel. FILTER(LANG(?countryLabel) = "sv") }
+      ${extra}
+    } GROUP BY ?item`);
+  return rows.map((r) => ({
+    name: displayName(r.ttl),
+    title: r.ttl,
+    ...parsePoint(r.pt),
+    country: r.cty ?? null,
+    elevation: r.ele ? Math.round(Number(r.ele)) : null,
+    sitelinks: Number(r.links),
+  }));
+}
+
+const zoomBySitelinks = (n, high, mid) => (n >= high ? 3 : n >= mid ? 4 : 5);
+
+async function buildVolcanoes() {
+  const items = await wikidataPlaces("?item wdt:P31/wdt:P279* wd:Q8072", 12, "OPTIONAL { ?item wdt:P2044 ?elev }");
+  const out = items.map(({ sitelinks, ...v }) => ({ ...v, z: zoomBySitelinks(sitelinks, 50, 25) }));
+  await writeFile("public/data/volcanoes.json", JSON.stringify(out));
+  console.log("volcanoes", out.length);
+}
+
+async function buildHeritage() {
+  const items = await wikidataPlaces("?item wdt:P1435 wd:Q9259", 8);
+  const out = items.map(({ sitelinks, elevation, ...h }) => ({ ...h, z: zoomBySitelinks(sitelinks, 60, 30) }));
+  await writeFile("public/data/heritage.json", JSON.stringify(out));
+  console.log("heritage", out.length);
+}
+
 const only = process.argv[2];
 if (!only || only === "cities") await buildCities();
 if (!only || only === "lakes") await buildLakes();
@@ -270,3 +335,5 @@ if (!only || only === "deserts") await buildDeserts();
 if (!only || only === "landforms") await buildLandforms();
 if (!only || only === "marine") await buildMarine();
 if (!only || only === "rainforests") await buildRainforests();
+if (!only || only === "volcanoes") await buildVolcanoes();
+if (!only || only === "heritage") await buildHeritage();
