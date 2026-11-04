@@ -6,4 +6,5 @@ export interface Info {
   qid?: string;
   flagUrl?: string;
   showWikiImage?: boolean;
+  hideIntro?: boolean;
 }

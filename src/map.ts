@@ -1,7 +1,7 @@
 import L from "leaflet";
 import type { Feature, FeatureCollection } from "geojson";
 import type { Info } from "./info";
-import { countryInfo } from "./countries";
+import { countryInfo, type CountryFacts } from "./countries";
 import { cityInfo, loadCities, type City } from "./cities";
 import { namedInfo, loadMountains, mountainInfo, mountainMinZoom, loadVolcanoes, volcanoInfo, loadHeritage, heritageInfo, type Mountain, type Volcano, type HeritageSite } from "./nature";
 
@@ -42,6 +42,8 @@ export async function createMap(
     loadHeritage(),
   ]);
 
+  const countryFacts: Record<string, CountryFacts> = await json("./data/country-facts.json");
+
   let selected: L.Path | null = null;
   const select = (path: L.Path | null, info: Info) => {
     selected?.setStyle(BASE);
@@ -64,7 +66,7 @@ export async function createMap(
       path.on({
         mouseover: () => path !== selected && path.setStyle(HOVER),
         mouseout: () => path !== selected && path.setStyle(BASE),
-        click: () => select(path, countryInfo(feature.properties ?? {})),
+        click: () => select(path, countryInfo(feature.properties ?? {}, countryFacts[feature.properties?.WIKIDATAID])),
       });
     },
   }).addTo(map);

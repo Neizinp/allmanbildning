@@ -96,9 +96,14 @@ createMap(
       });
     }
 
+    const wiki = content.querySelector(".wiki")!;
+    if (info.hideIntro) {
+      wiki.replaceChildren(wikiLink(info.wikiTitle, "Läs mer på Wikipedia"));
+      return;
+    }
+
     const summary = await fetchSummary(info.wikiTitle);
     if (current !== info.name) return;
-    const wiki = content.querySelector(".wiki")!;
     wiki.replaceChildren();
     if (info.showWikiImage && summary?.thumbnail) showImage(summary.thumbnail, info.name, "photo");
     if (!summary) {
