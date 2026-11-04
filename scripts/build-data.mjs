@@ -487,6 +487,11 @@ async function infoboxSymbols(title) {
     const cells = [...m[0].matchAll(/<t[dh][\s\S]*?<\/t[dh]>/g)].map((c) => stripHtml(c[0]));
     const kind = /^Landskaps(djur|blomma)/i.exec(cells[0] ?? "")?.[1]?.toLowerCase();
     if (kind && cells[1]) symbols[kind] = cells[1].split(/,|\//)[0].replace(/\s*\(.*\)$/, "").trim();
+    const pop = /^Folkmängd/i.test(cells[0] ?? "") ? /^([\d\s]+?)\s*\((\d{4})/.exec(cells[1] ?? "") : null;
+    if (pop) {
+      symbols.pop = Number(pop[1].replace(/\s/g, ""));
+      symbols.popYear = Number(pop[2]);
+    }
   }
   return symbols;
 }
@@ -566,6 +571,7 @@ async function buildProvinces() {
     const crest = crestFile(qids[i]);
     if (!photo) console.warn("saknar foto:", names[i]);
     if (!crest) console.warn("saknar vapen:", names[i]);
+    if (!symbols.pop) console.warn("saknar befolkning:", names[i]);
     if (!symbols.djur || !symbols.blomma) console.warn("saknar djur/blomma:", names[i], symbols);
     out.push({
       type: "Feature",
@@ -575,6 +581,8 @@ async function buildProvinces() {
         landsdel: f.properties.landsdel,
         djur: symbols.djur ?? null,
         blomma: symbols.blomma ?? null,
+        pop: symbols.pop ?? null,
+        popYear: symbols.popYear ?? null,
         vapen: crest ? commonsUrl(crest, 200) : null,
         foto: photo ? commonsUrl(photo, 640) : null,
         fotoFil: photo,
