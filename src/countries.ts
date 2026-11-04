@@ -13,6 +13,7 @@ export function countryInfo(p: Record<string, unknown>): Info {
       ["Ekonomi", String(p.ECONOMY)],
     ],
     wikiTitle: name,
+    qid: String(p.WIKIDATAID),
     flagUrl: /^[A-Z]{2}$/.test(iso) ? `https://flagcdn.com/w320/${iso.toLowerCase()}.png` : undefined,
   };
 }

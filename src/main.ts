@@ -1,12 +1,61 @@
 import "./style.css";
 import { createMap } from "./map";
 import { fetchSummary } from "./wikipedia";
+import { loadFacts, wikiUrl, lifespan, type Facts } from "./facts";
 
 const panel = document.getElementById("panel")!;
 const content = document.getElementById("panel-content")!;
 document.getElementById("panel-close")!.addEventListener("click", () => (panel.hidden = true));
 
 let current = "";
+
+function wikiLink(title: string, text: string) {
+  const a = document.createElement("a");
+  a.href = wikiUrl(title);
+  a.target = "_blank";
+  a.rel = "noopener";
+  a.textContent = text;
+  return a;
+}
+
+function renderFacts(el: Element, facts: Facts) {
+  const section = (heading: string, items: HTMLElement[]) => {
+    if (!items.length) return;
+    const h = document.createElement("h3");
+    h.textContent = heading;
+    const ul = document.createElement("ul");
+    ul.append(...items);
+    el.append(h, ul);
+  };
+
+  section(
+    "Händelser",
+    facts.events.map((e) => {
+      const li = document.createElement("li");
+      const year = document.createElement("span");
+      year.className = "year";
+      year.textContent = e.year === null ? "" : String(e.year);
+      li.append(year, wikiLink(e.title, e.name));
+      return li;
+    }),
+  );
+
+  section(
+    "Kända personer",
+    facts.people.map((p) => {
+      const li = document.createElement("li");
+      li.append(wikiLink(p.title, p.name));
+      const meta = [lifespan(p), p.desc].filter(Boolean).join(", ");
+      if (meta) {
+        const span = document.createElement("span");
+        span.className = "muted";
+        span.textContent = ` (${meta})`;
+        li.append(span);
+      }
+      return li;
+    }),
+  );
+}
 
 createMap(document.getElementById("map")!, async (info) => {
   current = info.name;
@@ -15,7 +64,8 @@ createMap(document.getElementById("map")!, async (info) => {
     <h2></h2>
     <p class="sub"></p>
     <dl></dl>
-    <div class="wiki"><p class="muted">Hämtar från Wikipedia …</p></div>`;
+    <div class="wiki"><p class="muted">Hämtar från Wikipedia …</p></div>
+    <div class="facts"></div>`;
   content.querySelector("h2")!.textContent = info.name;
   content.querySelector(".sub")!.textContent = info.subtitle;
   const dl = content.querySelector("dl")!;
@@ -36,6 +86,12 @@ createMap(document.getElementById("map")!, async (info) => {
   };
   if (info.flagUrl) showImage(info.flagUrl, `Flagga: ${info.name}`, "flag");
   panel.hidden = false;
+
+  if (info.qid) {
+    loadFacts(info.qid).then((facts) => {
+      if (facts && current === info.name) renderFacts(content.querySelector(".facts")!, facts);
+    });
+  }
 
   const summary = await fetchSummary(info.wikiTitle);
   if (current !== info.name) return;
