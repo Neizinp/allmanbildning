@@ -171,12 +171,13 @@ const bboxArea = (coords) => {
 };
 
 // Skriver ut en polygonfil med namn, svensk Wikipedia-titel och typ; största ytorna först så små hamnar överst.
-async function buildAreas(dataset, outFile, select) {
+async function buildAreas(dataset, outFile, select, colorMode = null) {
   const { features } = await load(dataset);
   const chosen = features
     .map((f) => ({ f, kind: select(pick(f.properties, "featurecla")) }))
     .filter((x) => x.kind && pick(x.f.properties, "wikidataid") && pick(x.f.properties, "name"));
   const titles = await svTitles(chosen.map((x) => pick(x.f.properties, "wikidataid")));
+  const satellite = colorMode ? await loadSatellite() : null;
   const byTitle = new Map();
   for (const { f, kind } of chosen) {
     const title = titles.get(pick(f.properties, "wikidataid"));
@@ -190,13 +191,28 @@ async function buildAreas(dataset, outFile, select) {
       const geometry = mergeGeometries(geoms);
       return {
         type: "Feature",
-        properties: { name: shortName(title), title, kind },
+        properties: {
+          name: shortName(title),
+          title,
+          kind,
+          ...(colorMode ? { color: averageColor(geometry, satellite, colorMode) } : {}),
+        },
         geometry: { type: geometry.type, coordinates: roundCoords(geometry.coordinates) },
         area: bboxArea(geometry.coordinates),
       };
     })
     .sort((a, b) => b.area - a.area)
     .map(({ area, ...f }) => f);
+  if (colorMode) {
+    for (const feature of out) {
+      if (feature.properties.color) continue;
+      const peers = out.filter((other) => other.properties.kind === feature.properties.kind && other.properties.color);
+      const channels = peers.map((other) => other.properties.color.match(/[\da-f]{2}/gi).map((v) => parseInt(v, 16)));
+      feature.properties.color = `#${[0, 1, 2]
+        .map((i) => Math.round(channels.reduce((sum, rgb) => sum + rgb[i], 0) / channels.length).toString(16).padStart(2, "0"))
+        .join("")}`;
+    }
+  }
   await writeFile(outFile, JSON.stringify({ type: "FeatureCollection", features: out }));
   console.log(outFile, out.length);
 }
@@ -228,7 +244,7 @@ const buildLandforms = () =>
 
 const MARINE = { ocean: "Ocean", sea: "Hav", bay: "Bukt", gulf: "Golf", strait: "Sund", channel: "Kanal", sound: "Sund", reef: "Rev" };
 const buildMarine = () =>
-  buildAreas("ne_50m_geography_marine_polys", "public/data/marine.geojson", (c) => MARINE[c] ?? null);
+  buildAreas("ne_50m_geography_marine_polys", "public/data/marine.geojson", (c) => MARINE[c] ?? null, "water");
 
 const RIVER_CACHE = "scripts/.river-cache.json";
 
@@ -409,7 +425,7 @@ const inRing = (x, y, ring) => {
 };
 
 // Ytvägt medelvärde av satellitbildens landpixlar inuti landets polygoner.
-function averageColor(geometry, img) {
+function averageColor(geometry, img, mode = "land") {
   const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
   const sum = [0, 0, 0, 0];
   const all = [0, 0, 0, 0];
@@ -428,7 +444,8 @@ function averageColor(geometry, img) {
         const [r, g, b] = [img.data[i], img.data[i + 1], img.data[i + 2]];
         const w = step * step * Math.cos((y * Math.PI) / 180);
         const water = b > r * 1.3 && b > g * 1.05 && r + g + b < 360;
-        for (const acc of water ? [all] : [all, sum]) {
+        const selected = mode === "water" ? water : !water;
+        for (const acc of selected ? [all, sum] : [all]) {
           acc[0] += r * w;
           acc[1] += g * w;
           acc[2] += b * w;
@@ -439,8 +456,8 @@ function averageColor(geometry, img) {
   }
   const acc = sum[3] > 0 ? sum : all;
   if (acc[3] === 0) return null;
-  // Lyft något mot vitt så att färgerna fungerar som kartfyllnad.
-  const hex = (v) => Math.round((v / acc[3]) * 0.75 + 255 * 0.25).toString(16).padStart(2, "0");
+  const tint = mode === "water" ? 0.22 : 0.25;
+  const hex = (v) => Math.round((v / acc[3]) * (1 - tint) + 255 * tint).toString(16).padStart(2, "0");
   return `#${hex(acc[0])}${hex(acc[1])}${hex(acc[2])}`;
 }
 
