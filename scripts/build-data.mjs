@@ -466,13 +466,31 @@ async function buildWorld() {
 
 async function buildCounties() {
   const { features } = await load("ne_10m_admin_1_states_provinces");
-  const out = features
-    .filter((f) => f.properties.admin === "Sweden")
-    .map((f) => ({
+  const counties = features.filter((f) => f.properties.admin === "Sweden");
+  const qids = counties.map((f) => f.properties.wikidataid);
+  const titles = await svTitles(qids);
+  const populations = await latestPopulation(qids);
+  const residences = await sparql(`
+    SELECT ?c ?l WHERE {
+      VALUES ?c { ${qids.map((q) => `wd:${q}`).join(" ")} }
+      ?c wdt:P36 ?v. ?v rdfs:label ?l. FILTER(LANG(?l) = "sv")
+    }`);
+  const residence = new Map(residences.map((r) => [r.c.split("/").pop(), r.l]));
+  const out = counties.map((f) => {
+    const qid = f.properties.wikidataid;
+    const title = titles.get(qid) ?? f.properties.name_sv ?? f.properties.name;
+    return {
       type: "Feature",
-      properties: { name: f.properties.name_sv ?? f.properties.name },
+      properties: {
+        name: title,
+        title,
+        residence: residence.get(qid) ?? null,
+        pop: populations.get(qid)?.pop ?? null,
+        popYear: populations.get(qid)?.year ?? null,
+      },
       geometry: { type: f.geometry.type, coordinates: roundDeep(f.geometry.coordinates, 3) },
-    }));
+    };
+  });
   await writeFile("public/data/sweden-counties.geojson", JSON.stringify({ type: "FeatureCollection", features: out }));
   console.log("län", out.length);
 }
