@@ -42,7 +42,7 @@ function renderFacts(el: Element, facts: Facts) {
 
   section(
     "Kända personer",
-    facts.people.map((p) => {
+    [...facts.people].sort((a, b) => (b.born ?? -Infinity) - (a.born ?? -Infinity)).map((p) => {
       const li = document.createElement("li");
       li.append(wikiLink(p.title, p.name));
       const meta = [lifespan(p), p.desc].filter(Boolean).join(", ");
