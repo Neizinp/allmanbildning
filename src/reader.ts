@@ -58,12 +58,31 @@ const body = document.getElementById("reader-body")!;
 const external = document.getElementById("reader-external") as HTMLAnchorElement;
 let openTitle = "";
 
-export function closeReader() {
+// Läsaren får en egen historikpost, så att webbläsarens bakåt (även svepet på pekplattan) stänger den.
+let pushed = false;
+let ignorePop = false;
+
+const hide = () => {
   reader.hidden = true;
   openTitle = "";
+};
+
+export function closeReader() {
+  if (reader.hidden) return;
+  hide();
+  if (pushed) {
+    pushed = false;
+    ignorePop = true;
+    history.back();
+  }
 }
 
-export async function openReader(title: string) {
+export async function openReader(title: string, push = true) {
+  if (push) {
+    if (pushed) history.replaceState({ reader: title }, "");
+    else history.pushState({ reader: title }, "");
+  }
+  pushed = true;
   openTitle = title;
   reader.hidden = false;
   external.href = wikiUrl(title);
@@ -114,6 +133,18 @@ export function wikiLink(title: string, text: string) {
 }
 
 document.getElementById("reader-back")!.addEventListener("click", closeReader);
+
+window.addEventListener("popstate", (e) => {
+  if (ignorePop) {
+    ignorePop = false;
+    return;
+  }
+  if (e.state?.reader) void openReader(e.state.reader, false);
+  else if (!reader.hidden) {
+    pushed = false;
+    hide();
+  }
+});
 // Escape stänger läsaren först, innan kartan hinner stänga faktarutan.
 window.addEventListener(
   "keydown",
