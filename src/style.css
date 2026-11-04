@@ -1,0 +1,34 @@
+@import "leaflet/dist/leaflet.css";
+
+* { box-sizing: border-box; }
+html, body, #app { height: 100%; margin: 0; }
+body { font-family: system-ui, sans-serif; color: #1c2430; }
+#app { position: relative; display: flex; }
+#map { flex: 1; background: #cfe3f2; }
+
+#panel {
+  position: absolute; z-index: 1000; background: #fff;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, .3); overflow-y: auto; padding: 1rem 1.25rem;
+}
+#panel[hidden] { display: none; }
+#panel-close {
+  position: absolute; top: .5rem; right: .75rem; border: 0; background: none;
+  font-size: 1.75rem; line-height: 1; cursor: pointer;
+}
+#panel h2 { margin: 0 2rem .25rem 0; }
+#panel .sub { color: #5b6674; margin: 0 0 .75rem; }
+#panel dl { display: grid; grid-template-columns: auto 1fr; gap: .25rem 1rem; margin: 0; }
+#panel dt { color: #5b6674; }
+#panel dd { margin: 0; }
+
+/* Desktop: sidopanel */
+@media (min-width: 700px) {
+  #panel { top: 1rem; right: 1rem; bottom: 1rem; width: 360px; border-radius: 12px; }
+}
+/* Mobil: bottenpanel */
+@media (max-width: 699px) {
+  #panel {
+    left: 0; right: 0; bottom: 0; max-height: 45vh;
+    border-radius: 16px 16px 0 0; padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
+}
