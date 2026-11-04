@@ -40,6 +40,51 @@ async function latestPopulation(qids) {
   return best;
 }
 
+// Tätorter i Sverige; stad/kommun-objekt ger dubbletter och felaktiga siffror.
+async function swedishPlaces() {
+  const rows = await sparql(`
+    SELECT ?item (SAMPLE(?ttl) AS ?t) (MAX(?pop) AS ?p) (SAMPLE(?coord) AS ?pt) WHERE {
+      VALUES ?cls { wd:Q12813115 }
+      ?item wdt:P31 ?cls; wdt:P17 wd:Q34; wdt:P1082 ?pop; wdt:P625 ?coord.
+      FILTER(?pop >= 5000)
+      ?a schema:about ?item; schema:isPartOf <https://sv.wikipedia.org/>; schema:name ?ttl.
+    } GROUP BY ?item`);
+  const qids = rows.map((r) => r.item.split("/").pop());
+  const populations = await latestPopulation(qids);
+  const seen = new Set();
+  return rows
+    .map((r, i) => {
+      const qid = qids[i];
+      const wd = populations.get(qid);
+      const pop = wd?.pop ?? Math.round(Number(r.p));
+      return {
+        name: displayName(r.t),
+        title: r.t,
+        qid,
+        ...parsePoint(r.pt),
+        pop,
+        popYear: wd?.year ?? null,
+        country: "Sverige",
+        capital: qid === "Q1754",
+        z: pop >= 200000 ? 3 : pop >= 50000 ? 4 : pop >= 20000 ? 5 : pop >= 10000 ? 6 : 7,
+      };
+    })
+    .filter((c) => !/^(Stockholm|Göteborg)( \(tätort\))?$|Göteborg$| och /.test(c.title))
+    .concat(await bigSwedishCities())
+    .sort((a, b) => b.pop - a.pop)
+    .filter((c) => !seen.has(c.title) && seen.add(c.title));
+}
+
+// Wikidatas tätortsposter för Stockholm och Göteborg är delområden med fel siffror, så de anges separat.
+async function bigSwedishCities() {
+  const wd = (await latestPopulation(["Q1754"])).get("Q1754");
+  return [
+    { name: "Stockholm", title: "Stockholm", qid: "Q1754", lat: 59.33, lon: 18.07, pop: wd?.pop ?? 984748, popYear: wd?.year ?? 2022, country: "Sverige", capital: true, z: 3 },
+    // Natural Earths siffra saknar årtal.
+    { name: "Göteborg", title: "Göteborg", qid: "Q25287", lat: 57.71, lon: 11.97, pop: 537797, popYear: null, country: "Sverige", capital: false, z: 3 },
+  ];
+}
+
 async function buildCities() {
   const { features } = await load("ne_50m_populated_places");
   const sorted = features
@@ -67,8 +112,9 @@ async function buildCities() {
       z: i < 60 ? 2 : i < 200 || p.ADM0CAP === 1 ? 3 : 4,
     };
   });
-  await writeFile("public/data/cities.json", JSON.stringify(cities));
-  console.log("cities", cities.length);
+  const all = [...cities.filter((c) => c.country !== "Sverige"), ...(await swedishPlaces())];
+  await writeFile("public/data/cities.json", JSON.stringify(all));
+  console.log("cities", all.length, "varav Sverige", all.length - cities.filter((c) => c.country !== "Sverige").length);
 }
 
 const round = (n) => Math.round(n * 100) / 100;
@@ -311,6 +357,46 @@ async function buildHeritage() {
   console.log("heritage", out.length);
 }
 
+const COUNTRY_PROPS = ["NAME", "NAME_SV", "POP_EST", "POP_YEAR", "CONTINENT", "SUBREGION", "ISO_A2_EH", "WIKIDATAID"];
+const pickProps = (p) => Object.fromEntries(COUNTRY_PROPS.map((k) => [k, p[k]]));
+const roundTo = (n, d) => {
+  const f = 10 ** d;
+  return Math.round(n * f) / f;
+};
+const roundDeep = (c, d) => (typeof c[0] === "number" ? c.map((n) => roundTo(n, d)) : c.map((x) => roundDeep(x, d)));
+
+// Världen i 50m-upplösning, men Sverige (och grannarna, så att gränserna passar) i 10m med Gotland och Öland.
+async function buildWorld() {
+  const world = await load("ne_50m_admin_0_countries");
+  const detailed = new Map((await load("ne_10m_admin_0_countries")).features.map((f) => [f.properties.ISO_A2_EH, f]));
+  const features = world.features.map((f) => {
+    const iso = f.properties.ISO_A2_EH;
+    const detail = ["SE", "NO", "FI", "DK"].includes(iso) ? detailed.get(iso) : null;
+    const geometry = detail ?? f;
+    const digits = iso === "SE" ? 3 : 2;
+    return {
+      type: "Feature",
+      properties: pickProps(f.properties),
+      geometry: { type: geometry.geometry.type, coordinates: roundDeep(geometry.geometry.coordinates, digits) },
+    };
+  });
+  await writeFile("public/data/countries.geojson", JSON.stringify({ type: "FeatureCollection", features }));
+  console.log("countries", features.length);
+}
+
+async function buildCounties() {
+  const { features } = await load("ne_10m_admin_1_states_provinces");
+  const out = features
+    .filter((f) => f.properties.admin === "Sweden")
+    .map((f) => ({
+      type: "Feature",
+      properties: { name: f.properties.name_sv ?? f.properties.name },
+      geometry: { type: f.geometry.type, coordinates: roundDeep(f.geometry.coordinates, 3) },
+    }));
+  await writeFile("public/data/sweden-counties.geojson", JSON.stringify({ type: "FeatureCollection", features: out }));
+  console.log("län", out.length);
+}
+
 const only = process.argv[2];
 if (!only || only === "cities") await buildCities();
 if (!only || only === "lakes") await buildLakes();
@@ -323,3 +409,5 @@ if (!only || only === "marine") await buildMarine();
 if (!only || only === "rainforests") await buildRainforests();
 if (!only || only === "volcanoes") await buildVolcanoes();
 if (!only || only === "heritage") await buildHeritage();
+if (only === "world") await buildWorld();
+if (only === "counties") await buildCounties();
