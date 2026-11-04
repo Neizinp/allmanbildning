@@ -96,6 +96,7 @@ async function buildCities() {
   const titles = await svTitles(picked.map((p) => p.WIKIDATAID));
   const countries = JSON.parse(await readFile("public/data/countries.geojson", "utf8"));
   const svCountry = new Map(countries.features.map((f) => [f.properties.NAME, f.properties.NAME_SV]));
+  const svByIso = new Map(countries.features.map((f) => [f.properties.ISO_A2_EH, f.properties.NAME_SV]));
   const populations = await latestPopulation(picked.map((p) => p.WIKIDATAID));
   const cities = picked.map((p, i) => {
     const title = titles.get(p.WIKIDATAID);
@@ -109,7 +110,7 @@ async function buildCities() {
       lon: p.LONGITUDE,
       pop: wd?.pop ?? p.POP_MAX,
       popYear: wd?.year ?? null,
-      country: svCountry.get(p.ADM0NAME) ?? p.ADM0NAME,
+      country: svByIso.get(p.ISO_A2) ?? svCountry.get(p.ADM0NAME) ?? p.ADM0NAME,
       capital: p.ADM0CAP === 1,
       z: i < 60 ? 2 : i < 200 || p.ADM0CAP === 1 ? 3 : 4,
     };
@@ -122,36 +123,41 @@ async function buildCities() {
 const round = (n) => Math.round(n * 100) / 100;
 const roundCoords = (c) => (typeof c[0] === "number" ? c.map(round) : c.map(roundCoords));
 const displayName = (title, fallback) => (title ? title.replace(/ \(.*\)$/, "") : fallback);
+// Tar bort geografiska tillägg som "Mount Baker, Washington" i visningsnamnet.
+const shortName = (title) => displayName(title).split(", ")[0];
+const uniqueBy = (items, key) => {
+  const seen = new Set();
+  return items.filter((x) => !seen.has(key(x)) && seen.add(key(x)));
+};
+// Behåller tillägget ("Gamla staden, Bern") bara när det kortade namnet annars blir tvetydigt.
+const disambiguate = (items) => {
+  const n = {};
+  for (const i of items) n[i.name] = (n[i.name] ?? 0) + 1;
+  return items.map((i) => (n[i.name] > 1 ? { ...i, name: displayName(i.title) } : i));
+};
+const mergeGeometries = (geoms) => {
+  const polygons = geoms.flatMap((g) => (g.type === "Polygon" ? [g.coordinates] : g.coordinates));
+  return polygons.length === 1 ? { type: "Polygon", coordinates: polygons[0] } : { type: "MultiPolygon", coordinates: polygons };
+};
 
-async function buildLakes() {
-  const { features } = await load("ne_50m_lakes");
-  const named = features.filter((f) => f.properties.name && f.properties.wikidataid);
-  const titles = await svTitles(named.map((f) => f.properties.wikidataid));
-  const lakes = named.map((f) => {
-    const p = f.properties;
-    const title = titles.get(p.wikidataid);
-    const name = displayName(title, p.name_sv ?? p.name_en ?? p.name);
-    return {
-      type: "Feature",
-      properties: { name, title: title ?? name },
-      geometry: { type: f.geometry.type, coordinates: roundCoords(f.geometry.coordinates) },
-    };
-  });
-  await writeFile("public/data/lakes.geojson", JSON.stringify({ type: "FeatureCollection", features: lakes }));
-  console.log("lakes", lakes.length);
-}
+const buildLakes = () => buildAreas("ne_50m_lakes", "public/data/lakes.geojson", () => "Sjö");
 
 async function buildMountains() {
   const { features } = await load("ne_10m_geography_regions_elevation_points");
   const named = features.filter((f) => f.properties.name && f.properties.wikidataid);
   const titles = await svTitles(named.map((f) => f.properties.wikidataid));
-  const mountains = named.map((f) => {
-    const p = f.properties;
-    const title = titles.get(p.wikidataid);
-    const name = displayName(title, p.name_sv ?? p.name_en ?? p.name);
-    const [lon, lat] = f.geometry.coordinates;
-    return { name, title: title ?? name, lat: round(lat), lon: round(lon), elevation: p.elevation };
-  });
+  // Bara berg som har en egen svensk Wikipedia-artikel; högsta först så dubbletter får rätt höjd.
+  const mountains = uniqueBy(
+    named
+      .filter((f) => titles.has(f.properties.wikidataid))
+      .map((f) => {
+        const title = titles.get(f.properties.wikidataid);
+        const [lon, lat] = f.geometry.coordinates;
+        return { name: shortName(title), title, lat: round(lat), lon: round(lon), elevation: f.properties.elevation };
+      })
+      .sort((a, b) => b.elevation - a.elevation),
+    (m) => m.title,
+  );
   await writeFile("public/data/mountains.json", JSON.stringify(mountains));
   console.log("mountains", mountains.length);
 }
@@ -169,18 +175,24 @@ async function buildAreas(dataset, outFile, select) {
   const { features } = await load(dataset);
   const chosen = features
     .map((f) => ({ f, kind: select(pick(f.properties, "featurecla")) }))
-    .filter((x) => x.kind && pick(x.f.properties, "wikidataid"));
+    .filter((x) => x.kind && pick(x.f.properties, "wikidataid") && pick(x.f.properties, "name"));
   const titles = await svTitles(chosen.map((x) => pick(x.f.properties, "wikidataid")));
-  const out = chosen
-    .map(({ f, kind }) => {
-      const p = f.properties;
-      const title = titles.get(pick(p, "wikidataid"));
-      const name = displayName(title, pick(p, "name_sv") ?? pick(p, "name_en") ?? pick(p, "name"));
+  const byTitle = new Map();
+  for (const { f, kind } of chosen) {
+    const title = titles.get(pick(f.properties, "wikidataid"));
+    if (!title) continue;
+    const e = byTitle.get(title) ?? { kind, geoms: [] };
+    e.geoms.push(f.geometry);
+    byTitle.set(title, e);
+  }
+  const out = [...byTitle]
+    .map(([title, { kind, geoms }]) => {
+      const geometry = mergeGeometries(geoms);
       return {
         type: "Feature",
-        properties: { name, title: title ?? name, kind },
-        geometry: { type: f.geometry.type, coordinates: roundCoords(f.geometry.coordinates) },
-        area: bboxArea(f.geometry.coordinates),
+        properties: { name: shortName(title), title, kind },
+        geometry: { type: geometry.type, coordinates: roundCoords(geometry.coordinates) },
+        area: bboxArea(geometry.coordinates),
       };
     })
     .sort((a, b) => b.area - a.area)
@@ -281,7 +293,7 @@ async function buildRivers() {
   }
   const out = [...byTitle].map(([title, e]) => ({
     type: "Feature",
-    properties: { name: displayName(title), title, rank: e.rank },
+    properties: { name: shortName(title), title, rank: e.rank },
     geometry: { type: "MultiLineString", coordinates: roundCoords(e.lines) },
   }));
   await writeFile("public/data/rivers.geojson", JSON.stringify({ type: "FeatureCollection", features: out }));
@@ -335,7 +347,7 @@ async function wikidataPlaces(pattern, minSitelinks, extra = "") {
     } GROUP BY ?item`);
   // Koordinater på andra himlakroppar har ett globsprefix före "Point(".
   return rows.filter((r) => r.pt.startsWith("Point(")).map((r) => ({
-    name: displayName(r.ttl),
+    name: shortName(r.ttl),
     title: r.ttl,
     ...parsePoint(r.pt),
     country: r.cty ?? null,
@@ -348,14 +360,24 @@ const zoomBySitelinks = (n, high, mid) => (n >= high ? 3 : n >= mid ? 4 : 5);
 
 async function buildVolcanoes() {
   const items = await wikidataPlaces("?item wdt:P31/wdt:P279* wd:Q8072", 12, "OPTIONAL { ?item wdt:P2044 ?elev }");
-  const out = items.map(({ sitelinks, ...v }) => ({ ...v, z: zoomBySitelinks(sitelinks, 50, 25) }));
+  const out = disambiguate(
+    uniqueBy(
+      items.sort((a, b) => b.sitelinks - a.sitelinks),
+      (v) => v.title,
+    ),
+  ).map(({ sitelinks, ...v }) => ({ ...v, z: zoomBySitelinks(sitelinks, 50, 25) }));
   await writeFile("public/data/volcanoes.json", JSON.stringify(out));
   console.log("volcanoes", out.length);
 }
 
 async function buildHeritage() {
   const items = await wikidataPlaces("?item wdt:P1435 wd:Q9259", 8);
-  const out = items.map(({ sitelinks, elevation, ...h }) => ({ ...h, z: zoomBySitelinks(sitelinks, 60, 30) }));
+  const out = disambiguate(
+    uniqueBy(
+      items.sort((a, b) => b.sitelinks - a.sitelinks),
+      (h) => h.title,
+    ),
+  ).map(({ sitelinks, elevation, ...h }) => ({ ...h, z: zoomBySitelinks(sitelinks, 60, 30) }));
   await writeFile("public/data/heritage.json", JSON.stringify(out));
   console.log("heritage", out.length);
 }
