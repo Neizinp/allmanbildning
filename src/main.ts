@@ -30,7 +30,7 @@ function renderFacts(el: Element, facts: Facts) {
 
   section(
     "Händelser",
-    facts.events.map((e) => {
+    [...facts.events].sort((a, b) => (b.year ?? -Infinity) - (a.year ?? -Infinity)).map((e) => {
       const li = document.createElement("li");
       const year = document.createElement("span");
       year.className = "year";
