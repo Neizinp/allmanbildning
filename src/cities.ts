@@ -19,4 +19,5 @@ export const cityInfo = (c: City): Info => ({
   subtitle: c.capital ? `Huvudstad i ${c.country}` : c.country,
   facts: [["Befolkning", formatNumber(c.pop)]],
   wikiTitle: c.title,
+  showWikiImage: true,
 });

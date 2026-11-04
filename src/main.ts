@@ -11,6 +11,7 @@ let current = "";
 createMap(document.getElementById("map")!, async (info) => {
   current = info.name;
   content.innerHTML = `
+    <div class="image"></div>
     <h2></h2>
     <p class="sub"></p>
     <dl></dl>
@@ -25,12 +26,22 @@ createMap(document.getElementById("map")!, async (info) => {
     dd.textContent = value;
     dl.append(dt, dd);
   }
+  const image = content.querySelector<HTMLElement>(".image")!;
+  const showImage = (src: string, alt: string, className = "") => {
+    const img = document.createElement("img");
+    img.src = src;
+    img.alt = alt;
+    img.className = className;
+    image.replaceChildren(img);
+  };
+  if (info.flagUrl) showImage(info.flagUrl, `Flagga: ${info.name}`, "flag");
   panel.hidden = false;
 
   const summary = await fetchSummary(info.wikiTitle);
   if (current !== info.name) return;
   const wiki = content.querySelector(".wiki")!;
   wiki.replaceChildren();
+  if (info.showWikiImage && summary?.thumbnail) showImage(summary.thumbnail, info.name, "photo");
   if (!summary) {
     wiki.innerHTML = `<p class="muted">Kunde inte hämta text från Wikipedia.</p>`;
     return;

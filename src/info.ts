@@ -3,4 +3,6 @@ export interface Info {
   subtitle: string;
   facts: [label: string, value: string][];
   wikiTitle: string;
+  flagUrl?: string;
+  showWikiImage?: boolean;
 }

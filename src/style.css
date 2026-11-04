@@ -37,3 +37,7 @@ body { font-family: system-ui, sans-serif; color: #1c2430; }
 #panel .muted { color: #5b6674; }
 
 .mountain-icon { color: #7a4a21; font-size: 16px; line-height: 16px; text-align: center; text-shadow: 0 0 2px #fff; }
+
+#panel .image img { display: block; max-width: 100%; border-radius: 8px; margin: 0 0 .75rem; }
+#panel .image .flag { max-height: 120px; border: 1px solid #d5dae0; }
+#panel .image .photo { width: 100%; max-height: 220px; object-fit: cover; }
