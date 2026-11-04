@@ -48,3 +48,25 @@ body { font-family: system-ui, sans-serif; color: #1c2430; }
 #panel ul { margin: 0; padding: 0; list-style: none; line-height: 1.45; }
 #panel li { padding: .15rem 0; }
 #panel .year { display: inline-block; min-width: 3.5rem; color: #5b6674; font-variant-numeric: tabular-nums; }
+
+/* Lagerväljare */
+.layer-control {
+  background: #fff; border-radius: 12px; box-shadow: 0 2px 10px rgba(0, 0, 0, .25);
+  font-size: .9rem; max-height: calc(100vh - 6rem); overflow-y: auto; min-width: 9rem;
+}
+.layer-toggle {
+  display: block; width: 100%; padding: .55rem .9rem; border: 0; background: none; cursor: pointer;
+  font: inherit; font-weight: 600; text-align: left;
+}
+.layer-body { padding: 0 .9rem .7rem; }
+.layer-body[hidden] { display: none; }
+.layer-actions { display: flex; gap: .4rem; margin-bottom: .4rem; }
+.layer-action {
+  flex: 1; padding: .3rem .5rem; border: 1px solid #c9d1da; border-radius: 6px; background: #f4f6f8;
+  cursor: pointer; font: inherit;
+}
+.layer-action:hover { background: #e8edf2; }
+.layer-group { border: 0; padding: 0; margin: .5rem 0 0; }
+.layer-group legend { padding: 0; font-size: .75rem; letter-spacing: .04em; text-transform: uppercase; color: #5b6674; }
+.layer-row { display: flex; align-items: center; gap: .5rem; padding: .2rem 0; cursor: pointer; }
+.layer-row input { width: 1rem; height: 1rem; }

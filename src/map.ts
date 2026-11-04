@@ -2,6 +2,7 @@ import L from "leaflet";
 import type { Feature, FeatureCollection } from "geojson";
 import type { Info } from "./info";
 import { countryInfo, type CountryFacts } from "./countries";
+import { addLayerControl } from "./layer-control";
 import { cityInfo, loadCities, type City } from "./cities";
 import { namedInfo, loadMountains, mountainInfo, mountainMinZoom, loadVolcanoes, volcanoInfo, loadHeritage, heritageInfo, type Mountain, type Volcano, type HeritageSite } from "./nature";
 
@@ -9,7 +10,7 @@ const BASE: L.PathOptions = {
   color: "#6b7a8c",
   weight: 1,
   fillColor: "#e8e0c8",
-  fillOpacity: 0.85,
+  fillOpacity: 1,
   bubblingMouseEvents: false,
 };
 const HOVER: L.PathOptions = { fillColor: "#f4d27a" };
@@ -45,14 +46,15 @@ export async function createMap(
   const countryFacts: Record<string, CountryFacts> = await json("./data/country-facts.json");
 
   let selected: L.Path | null = null;
+  const resetCountry = (path: L.Path | null) => path && countryLayer.resetStyle(path);
   const select = (path: L.Path | null, info: Info) => {
-    selected?.setStyle(BASE);
+    resetCountry(selected);
     selected = path;
     path?.setStyle(SELECTED);
     onSelect(info);
   };
   const clear = () => {
-    selected?.setStyle(BASE);
+    resetCountry(selected);
     selected = null;
     onClear();
   };
@@ -60,12 +62,12 @@ export async function createMap(
   document.addEventListener("keydown", (e) => e.key === "Escape" && clear());
 
   const countryLayer = L.geoJSON(data, {
-    style: BASE,
+    style: (f) => ({ ...BASE, fillColor: f?.properties.COLOR ?? BASE.fillColor }),
     onEachFeature(feature: Feature, l) {
       const path = l as L.Path;
       path.on({
         mouseover: () => path !== selected && path.setStyle(HOVER),
-        mouseout: () => path !== selected && path.setStyle(BASE),
+        mouseout: () => path !== selected && countryLayer.resetStyle(path),
         click: () => select(path, countryInfo(feature.properties ?? {}, countryFacts[feature.properties?.WIKIDATAID])),
       });
     },
@@ -85,7 +87,12 @@ export async function createMap(
     });
 
   map.createPane("marine").style.zIndex = "250";
-  const marineLayer = (await area("marine", "#4a90c2", "#8fbfe3", 0.4, { pane: "marine" })).addTo(map);
+  const marineLayer = (
+    await area("marine", "#4a90c2", "#8fbfe3", 0.4, {
+      pane: "marine",
+      style: { weight: 0, fillColor: "#8fbfe3", fillOpacity: 0.4, bubblingMouseEvents: false },
+    })
+  ).addTo(map);
   const landformLayer = (await area("landforms", "#7b6aa8", "#9a8cc4", 0.25)).addTo(map);
   const desertLayer = (await area("deserts", "#c79a2e", "#e9c46a", 0.5)).addTo(map);
   const rainforestLayer = (await area("rainforests", "#1e6b3a", "#3f9a5b", 0.5)).addTo(map);
@@ -170,31 +177,29 @@ export async function createMap(
     (h) => iconMarker(h.lat, h.lon, "heritage-icon", "◆").on("click", () => select(null, heritageInfo(h))),
   );
 
-  const overlays = {
-    Städer: cityLayer,
-    Bergstoppar: mountainLayer,
-    Vulkaner: volcanoLayer,
-    Världsarv: heritageLayer,
-    Bergskedjor: rangeLayer,
-    Öknar: desertLayer,
-    Regnskogar: rainforestLayer,
-    Landformer: landformLayer,
-    "Hav och sund": marineLayer,
-    Sjöar: lakeLayer,
-    Floder: riverLayer,
-  };
-  L.control.layers(undefined, overlays, { collapsed: true }).addTo(map);
+  const countyLayer = L.geoJSON((await json("./data/sweden-counties.geojson")) as FeatureCollection, {
+    style: { color: "#7d8a99", weight: 1, dashArray: "4 3", fill: false },
+    interactive: false,
+  }).addTo(map);
 
-  const STORAGE_KEY = "hiddenLayers";
-  const hidden: string[] = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '["Landformer"]');
-  for (const [name, layer] of Object.entries(overlays)) if (hidden.includes(name)) map.removeLayer(layer);
-  const persist = () =>
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(Object.entries(overlays).filter(([, l]) => !map.hasLayer(l)).map(([n]) => n)),
-    );
-  map.on("overlayadd overlayremove", persist);
+  addLayerControl(map, [
+    { title: "Platser", layers: { Städer: cityLayer, Världsarv: heritageLayer, Vulkaner: volcanoLayer, Bergstoppar: mountainLayer } },
+    {
+      title: "Natur",
+      layers: {
+        Bergskedjor: rangeLayer,
+        Öknar: desertLayer,
+        Regnskogar: rainforestLayer,
+        Sjöar: lakeLayer,
+        Floder: riverLayer,
+        "Hav och sund": marineLayer,
+        Landformer: landformLayer,
+      },
+    },
+    { title: "Sverige", layers: { Län: countyLayer } },
+  ]);
 
   map.fitBounds(countryLayer.getBounds());
+  if (import.meta.env.DEV) (window as unknown as { __map: L.Map }).__map = map;
   return clear;
 }
