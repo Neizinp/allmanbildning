@@ -32,3 +32,6 @@ body { font-family: system-ui, sans-serif; color: #1c2430; }
     border-radius: 16px 16px 0 0; padding-bottom: calc(1rem + env(safe-area-inset-bottom));
   }
 }
+
+#panel .wiki { margin-top: 1rem; line-height: 1.5; }
+#panel .muted { color: #5b6674; }
