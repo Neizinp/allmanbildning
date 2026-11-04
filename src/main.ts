@@ -5,7 +5,8 @@ import { loadFacts, wikiUrl, lifespan, type Facts } from "./facts";
 
 const panel = document.getElementById("panel")!;
 const content = document.getElementById("panel-content")!;
-document.getElementById("panel-close")!.addEventListener("click", () => (panel.hidden = true));
+let clearSelection = () => {};
+document.getElementById("panel-close")!.addEventListener("click", () => clearSelection());
 
 let current = "";
 
@@ -57,57 +58,64 @@ function renderFacts(el: Element, facts: Facts) {
   );
 }
 
-createMap(document.getElementById("map")!, async (info) => {
-  current = info.name;
-  content.innerHTML = `
-    <div class="image"></div>
-    <h2></h2>
-    <p class="sub"></p>
-    <dl></dl>
-    <div class="wiki"><p class="muted">Hämtar från Wikipedia …</p></div>
-    <div class="facts"></div>`;
-  content.querySelector("h2")!.textContent = info.name;
-  content.querySelector(".sub")!.textContent = info.subtitle;
-  const dl = content.querySelector("dl")!;
-  for (const [label, value] of info.facts) {
-    const dt = document.createElement("dt");
-    const dd = document.createElement("dd");
-    dt.textContent = label;
-    dd.textContent = value;
-    dl.append(dt, dd);
-  }
-  const image = content.querySelector<HTMLElement>(".image")!;
-  const showImage = (src: string, alt: string, className = "") => {
-    const img = document.createElement("img");
-    img.src = src;
-    img.alt = alt;
-    img.className = className;
-    image.replaceChildren(img);
-  };
-  if (info.flagUrl) showImage(info.flagUrl, `Flagga: ${info.name}`, "flag");
-  panel.hidden = false;
+createMap(
+  document.getElementById("map")!,
+  async (info) => {
+    current = info.name;
+    content.innerHTML = `
+      <div class="image"></div>
+      <h2></h2>
+      <p class="sub"></p>
+      <dl></dl>
+      <div class="wiki"><p class="muted">Hämtar från Wikipedia …</p></div>
+      <div class="facts"></div>`;
+    content.querySelector("h2")!.textContent = info.name;
+    content.querySelector(".sub")!.textContent = info.subtitle;
+    const dl = content.querySelector("dl")!;
+    for (const [label, value] of info.facts) {
+      const dt = document.createElement("dt");
+      const dd = document.createElement("dd");
+      dt.textContent = label;
+      dd.textContent = value;
+      dl.append(dt, dd);
+    }
+    const image = content.querySelector<HTMLElement>(".image")!;
+    const showImage = (src: string, alt: string, className = "") => {
+      const img = document.createElement("img");
+      img.src = src;
+      img.alt = alt;
+      img.className = className;
+      image.replaceChildren(img);
+    };
+    if (info.flagUrl) showImage(info.flagUrl, `Flagga: ${info.name}`, "flag");
+    panel.hidden = false;
 
-  if (info.qid) {
-    loadFacts(info.qid).then((facts) => {
-      if (facts && current === info.name) renderFacts(content.querySelector(".facts")!, facts);
-    });
-  }
+    if (info.qid) {
+      loadFacts(info.qid).then((facts) => {
+        if (facts && current === info.name) renderFacts(content.querySelector(".facts")!, facts);
+      });
+    }
 
-  const summary = await fetchSummary(info.wikiTitle);
-  if (current !== info.name) return;
-  const wiki = content.querySelector(".wiki")!;
-  wiki.replaceChildren();
-  if (info.showWikiImage && summary?.thumbnail) showImage(summary.thumbnail, info.name, "photo");
-  if (!summary) {
-    wiki.innerHTML = `<p class="muted">Kunde inte hämta text från Wikipedia.</p>`;
-    return;
-  }
-  const p = document.createElement("p");
-  p.textContent = summary.extract;
-  const a = document.createElement("a");
-  a.href = summary.url;
-  a.target = "_blank";
-  a.rel = "noopener";
-  a.textContent = "Läs mer på Wikipedia";
-  wiki.append(p, a);
-});
+    const summary = await fetchSummary(info.wikiTitle);
+    if (current !== info.name) return;
+    const wiki = content.querySelector(".wiki")!;
+    wiki.replaceChildren();
+    if (info.showWikiImage && summary?.thumbnail) showImage(summary.thumbnail, info.name, "photo");
+    if (!summary) {
+      wiki.innerHTML = `<p class="muted">Kunde inte hämta text från Wikipedia.</p>`;
+      return;
+    }
+    const p = document.createElement("p");
+    p.textContent = summary.extract;
+    const a = document.createElement("a");
+    a.href = summary.url;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.textContent = "Läs mer på Wikipedia";
+    wiki.append(p, a);
+  },
+  () => {
+    panel.hidden = true;
+    current = "";
+  },
+).then((clear) => (clearSelection = clear));

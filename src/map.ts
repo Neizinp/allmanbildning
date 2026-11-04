@@ -5,11 +5,21 @@ import { countryInfo } from "./countries";
 import { cityInfo, loadCities, type City } from "./cities";
 import { namedInfo, loadMountains, mountainInfo, mountainMinZoom, loadVolcanoes, volcanoInfo, loadHeritage, heritageInfo, type Mountain, type Volcano, type HeritageSite } from "./nature";
 
-const BASE: L.PathOptions = { color: "#6b7a8c", weight: 1, fillColor: "#e8e0c8", fillOpacity: 0.85 };
+const BASE: L.PathOptions = {
+  color: "#6b7a8c",
+  weight: 1,
+  fillColor: "#e8e0c8",
+  fillOpacity: 0.85,
+  bubblingMouseEvents: false,
+};
 const HOVER: L.PathOptions = { fillColor: "#f4d27a" };
 const SELECTED: L.PathOptions = { fillColor: "#e8913a", weight: 2 };
 
-export async function createMap(el: HTMLElement, onSelect: (info: Info) => void): Promise<void> {
+export async function createMap(
+  el: HTMLElement,
+  onSelect: (info: Info) => void,
+  onClear: () => void,
+): Promise<() => void> {
   const map = L.map(el, { worldCopyJump: true, minZoom: 2 }).setView([30, 10], 2);
   const json = (url: string) => fetch(url).then((r) => r.json());
   const [data, lakes, ranges, rivers, cities, mountains, volcanoes, heritage]: [
@@ -39,6 +49,13 @@ export async function createMap(el: HTMLElement, onSelect: (info: Info) => void)
     path?.setStyle(SELECTED);
     onSelect(info);
   };
+  const clear = () => {
+    selected?.setStyle(BASE);
+    selected = null;
+    onClear();
+  };
+  map.on("click", clear);
+  document.addEventListener("keydown", (e) => e.key === "Escape" && clear());
 
   const countryLayer = L.geoJSON(data, {
     style: BASE,
@@ -177,4 +194,5 @@ export async function createMap(el: HTMLElement, onSelect: (info: Info) => void)
   map.on("overlayadd overlayremove", persist);
 
   map.fitBounds(countryLayer.getBounds());
+  return clear;
 }
