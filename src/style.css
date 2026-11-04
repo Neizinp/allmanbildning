@@ -35,3 +35,5 @@ body { font-family: system-ui, sans-serif; color: #1c2430; }
 
 #panel .wiki { margin-top: 1rem; line-height: 1.5; }
 #panel .muted { color: #5b6674; }
+
+.mountain-icon { color: #7a4a21; font-size: 16px; line-height: 16px; text-align: center; text-shadow: 0 0 2px #fff; }

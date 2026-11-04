@@ -2,7 +2,8 @@ import L from "leaflet";
 import type { Feature, FeatureCollection } from "geojson";
 import type { Info } from "./info";
 import { countryInfo } from "./countries";
-import { cityInfo, loadCities } from "./cities";
+import { cityInfo, loadCities, type City } from "./cities";
+import { lakeInfo, loadMountains, mountainInfo, mountainMinZoom, type Mountain } from "./nature";
 
 const BASE: L.PathOptions = { color: "#6b7a8c", weight: 1, fillColor: "#e8e0c8", fillOpacity: 0.85 };
 const HOVER: L.PathOptions = { fillColor: "#f4d27a" };
@@ -10,9 +11,12 @@ const SELECTED: L.PathOptions = { fillColor: "#e8913a", weight: 2 };
 
 export async function createMap(el: HTMLElement, onSelect: (info: Info) => void): Promise<void> {
   const map = L.map(el, { worldCopyJump: true, minZoom: 2 }).setView([30, 10], 2);
-  const [data, cities] = await Promise.all([
-    fetch("./data/countries.geojson").then((r) => r.json() as Promise<FeatureCollection>),
+  const json = (url: string) => fetch(url).then((r) => r.json());
+  const [data, lakes, cities, mountains]: [FeatureCollection, FeatureCollection, City[], Mountain[]] = await Promise.all([
+    json("./data/countries.geojson"),
+    json("./data/lakes.geojson"),
     loadCities(),
+    loadMountains(),
   ]);
 
   let selected: L.Path | null = null;
@@ -35,30 +39,56 @@ export async function createMap(el: HTMLElement, onSelect: (info: Info) => void)
     },
   }).addTo(map);
 
-  const cityLayer = L.layerGroup().addTo(map);
-  const markers = cities.map((c) => ({
-    z: c.z,
-    marker: L.circleMarker([c.lat, c.lon], {
-      radius: c.capital ? 6 : 4,
-      color: "#fff",
-      weight: 1.5,
-      fillColor: c.capital ? "#c0392b" : "#2c3e50",
-      fillOpacity: 1,
-      bubblingMouseEvents: false,
-    })
-      .bindTooltip(c.name, { direction: "top" })
-      .on("click", () => select(null, cityInfo(c))),
-  }));
+  const lakeLayer = L.geoJSON(lakes, {
+    style: { color: "#3b82b6", weight: 1, fillColor: "#7fb6e0", fillOpacity: 0.95, bubblingMouseEvents: false },
+    onEachFeature(feature: Feature, l) {
+      const props = feature.properties as { name: string; title: string };
+      l.bindTooltip(props.name, { sticky: true }).on("click", () => select(null, lakeInfo(props)));
+    },
+  }).addTo(map);
 
-  const updateCities = () => {
-    const zoom = map.getZoom();
-    for (const { z, marker } of markers) {
-      const visible = z <= zoom;
-      if (visible !== cityLayer.hasLayer(marker)) visible ? cityLayer.addLayer(marker) : cityLayer.removeLayer(marker);
-    }
+  // Punktlager där varje objekt har en lägsta zoomnivå.
+  const gatedLayer = <T extends { name: string }>(items: T[], minZoom: (i: T) => number, make: (i: T) => L.Layer) => {
+    const group = L.layerGroup().addTo(map);
+    const entries = items.map((i) => ({ z: minZoom(i), layer: make(i).bindTooltip(i.name, { direction: "top" }) }));
+    const update = () => {
+      for (const { z, layer } of entries) {
+        const visible = z <= map.getZoom();
+        if (visible !== group.hasLayer(layer)) visible ? group.addLayer(layer) : group.removeLayer(layer);
+      }
+    };
+    map.on("zoomend", update);
+    update();
+    return group;
   };
-  map.on("zoomend", updateCities);
-  updateCities();
+
+  const cityLayer = gatedLayer(
+    cities,
+    (c) => c.z,
+    (c) =>
+      L.circleMarker([c.lat, c.lon], {
+        radius: c.capital ? 6 : 4,
+        color: "#fff",
+        weight: 1.5,
+        fillColor: c.capital ? "#c0392b" : "#2c3e50",
+        fillOpacity: 1,
+        bubblingMouseEvents: false,
+      }).on("click", () => select(null, cityInfo(c))),
+  );
+
+  const mountainLayer = gatedLayer(
+    mountains,
+    mountainMinZoom,
+    (m) =>
+      L.marker([m.lat, m.lon], {
+        icon: L.divIcon({ className: "mountain-icon", html: "▲", iconSize: [16, 16] }),
+        bubblingMouseEvents: false,
+      }).on("click", () => select(null, mountainInfo(m))),
+  );
+
+  L.control
+    .layers(undefined, { Städer: cityLayer, Sjöar: lakeLayer, Berg: mountainLayer }, { collapsed: true })
+    .addTo(map);
 
   map.fitBounds(countryLayer.getBounds());
 }
