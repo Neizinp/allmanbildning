@@ -70,3 +70,5 @@ body { font-family: system-ui, sans-serif; color: #1c2430; }
 .layer-group legend { padding: 0; font-size: .75rem; letter-spacing: .04em; text-transform: uppercase; color: #5b6674; }
 .layer-row { display: flex; align-items: center; gap: .5rem; padding: .2rem 0; cursor: pointer; }
 .layer-row input { width: 1rem; height: 1rem; }
+
+.leaflet-bar .home-button { font-size: 20px; line-height: 30px; text-decoration: none; }

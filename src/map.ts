@@ -3,6 +3,7 @@ import type { Feature, FeatureCollection } from "geojson";
 import type { Info } from "./info";
 import { countryInfo, type CountryFacts } from "./countries";
 import { addLayerControl } from "./layer-control";
+import { addHomeControl } from "./home-control";
 import { cityInfo, loadCities, type City } from "./cities";
 import { namedInfo, loadMountains, mountainInfo, mountainMinZoom, loadVolcanoes, volcanoInfo, loadHeritage, heritageInfo, type Mountain, type Volcano, type HeritageSite } from "./nature";
 
@@ -182,6 +183,7 @@ export async function createMap(
     interactive: false,
   }).addTo(map);
 
+  addHomeControl(map, countryLayer.getBounds());
   addLayerControl(map, [
     { title: "Platser", layers: { Städer: cityLayer, Världsarv: heritageLayer, Vulkaner: volcanoLayer, Bergstoppar: mountainLayer } },
     {
