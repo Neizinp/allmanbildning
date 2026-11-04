@@ -5,7 +5,7 @@ import { countryInfo, type CountryFacts } from "./countries";
 import { addLayerControl } from "./layer-control";
 import { addHomeControl } from "./home-control";
 import { cityInfo, loadCities, type City } from "./cities";
-import { namedInfo, loadMountains, mountainInfo, mountainMinZoom, loadVolcanoes, volcanoInfo, loadHeritage, heritageInfo, type Mountain, type Volcano, type HeritageSite } from "./nature";
+import { countyInfo, type CountyProps, namedInfo, loadMountains, mountainInfo, mountainMinZoom, loadVolcanoes, volcanoInfo, loadHeritage, heritageInfo, type Mountain, type Volcano, type HeritageSite } from "./nature";
 
 const BASE: L.PathOptions = {
   color: "#6b7a8c",
@@ -72,6 +72,21 @@ export async function createMap(
         mouseover: () => path !== selected && path.setStyle(HOVER),
         mouseout: () => path !== selected && countryLayer.resetStyle(path),
         click: () => select(path, countryInfo(feature.properties ?? {}, countryFacts[feature.properties?.WIKIDATAID])),
+      });
+    },
+  }).addTo(map);
+
+  // Länen ligger direkt ovanpå länderna så att övriga lager hamnar ovanför och förblir klickbara.
+  const countyLayer = L.geoJSON((await json("./data/sweden-counties.geojson")) as FeatureCollection, {
+    style: { color: "#7d8a99", weight: 1, dashArray: "4 3", fillColor: "#fff", fillOpacity: 0, bubblingMouseEvents: false },
+    onEachFeature(feature: Feature, l) {
+      const props = feature.properties as CountyProps;
+      const path = l as L.Path;
+      l.bindTooltip(props.name, { sticky: true });
+      path.on({
+        mouseover: () => path.setStyle({ fillOpacity: 0.2 }),
+        mouseout: () => path.setStyle({ fillOpacity: 0 }),
+        click: () => select(null, countyInfo(props)),
       });
     },
   }).addTo(map);
@@ -179,11 +194,6 @@ export async function createMap(
     (h) => h.z,
     (h) => iconMarker(h.lat, h.lon, "heritage-icon", "◆").on("click", () => select(null, heritageInfo(h))),
   );
-
-  const countyLayer = L.geoJSON((await json("./data/sweden-counties.geojson")) as FeatureCollection, {
-    style: { color: "#7d8a99", weight: 1, dashArray: "4 3", fill: false },
-    interactive: false,
-  }).addTo(map);
 
   addHomeControl(map, countryLayer.getBounds());
   addLayerControl(map, [

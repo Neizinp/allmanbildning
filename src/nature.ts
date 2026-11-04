@@ -18,6 +18,25 @@ export const mountainInfo = (m: Mountain): Info => ({
   wikiTitle: m.title,
 });
 
+export interface CountyProps {
+  name: string;
+  title: string;
+  residence: string | null;
+  pop: number | null;
+  popYear: number | null;
+}
+
+export const countyInfo = (p: CountyProps): Info => ({
+  name: p.name,
+  subtitle: "Län i Sverige",
+  facts: [
+    ...(p.residence ? ([["Residensstad", p.residence]] as [string, string][]) : []),
+    ...(p.pop ? ([["Befolkning", `${formatNumber(p.pop)}${p.popYear ? ` (${p.popYear})` : ""}`]] as [string, string][]) : []),
+  ],
+  wikiTitle: p.title,
+  showWikiImage: true,
+});
+
 export const namedInfo =
   (subtitle: string) =>
   (p: { name: string; title: string }): Info => ({

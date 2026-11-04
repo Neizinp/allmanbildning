@@ -101,3 +101,5 @@ body { font-family: system-ui, sans-serif; color: #1c2430; }
 @media (max-width: 699px) {
   #reader { left: 0; right: 0; bottom: 0; top: 4rem; border-radius: 16px 16px 0 0; }
 }
+
+.leaflet-interactive:focus { outline: none; }
