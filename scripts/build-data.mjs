@@ -99,23 +99,67 @@ async function buildMountains() {
   console.log("mountains", mountains.length);
 }
 
-async function buildRanges() {
-  const { features } = await load("ne_50m_geography_regions_polys");
-  const ranges = features.filter((f) => f.properties.FEATURECLA === "Range/mtn" && f.properties.WIKIDATAID);
-  const titles = await svTitles(ranges.map((f) => f.properties.WIKIDATAID));
-  const out = ranges.map((f) => {
-    const p = f.properties;
-    const title = titles.get(p.WIKIDATAID);
-    const name = displayName(title, p.NAME_SV ?? p.NAME_EN ?? p.NAME);
-    return {
-      type: "Feature",
-      properties: { name, title: title ?? name },
-      geometry: { type: f.geometry.type, coordinates: roundCoords(f.geometry.coordinates) },
-    };
-  });
-  await writeFile("public/data/ranges.geojson", JSON.stringify({ type: "FeatureCollection", features: out }));
-  console.log("ranges", out.length);
+const pick = (p, k) => p[k] ?? p[k.toUpperCase()];
+const bboxArea = (coords) => {
+  const pts = coords.flat(Infinity);
+  const xs = pts.filter((_, i) => i % 2 === 0);
+  const ys = pts.filter((_, i) => i % 2 === 1);
+  return (Math.max(...xs) - Math.min(...xs)) * (Math.max(...ys) - Math.min(...ys));
+};
+
+// Skriver ut en polygonfil med namn, svensk Wikipedia-titel och typ; största ytorna först så små hamnar överst.
+async function buildAreas(dataset, outFile, select) {
+  const { features } = await load(dataset);
+  const chosen = features
+    .map((f) => ({ f, kind: select(pick(f.properties, "featurecla")) }))
+    .filter((x) => x.kind && pick(x.f.properties, "wikidataid"));
+  const titles = await svTitles(chosen.map((x) => pick(x.f.properties, "wikidataid")));
+  const out = chosen
+    .map(({ f, kind }) => {
+      const p = f.properties;
+      const title = titles.get(pick(p, "wikidataid"));
+      const name = displayName(title, pick(p, "name_sv") ?? pick(p, "name_en") ?? pick(p, "name"));
+      return {
+        type: "Feature",
+        properties: { name, title: title ?? name, kind },
+        geometry: { type: f.geometry.type, coordinates: roundCoords(f.geometry.coordinates) },
+        area: bboxArea(f.geometry.coordinates),
+      };
+    })
+    .sort((a, b) => b.area - a.area)
+    .map(({ area, ...f }) => f);
+  await writeFile(outFile, JSON.stringify({ type: "FeatureCollection", features: out }));
+  console.log(outFile, out.length);
 }
+
+const buildRanges = () =>
+  buildAreas("ne_50m_geography_regions_polys", "public/data/ranges.geojson", (c) => (c === "Range/mtn" ? "Bergskedja" : null));
+
+const buildDeserts = () =>
+  buildAreas("ne_50m_geography_regions_polys", "public/data/deserts.geojson", (c) => (c === "Desert" ? "Öken" : null));
+
+const LANDFORMS = {
+  Plateau: "Platå",
+  Peninsula: "Halvö",
+  "Pen/cape": "Halvö eller udde",
+  Plain: "Slätt",
+  Delta: "Delta",
+  Basin: "Bäcken",
+  Valley: "Dal",
+  Lowland: "Lågland",
+  Gorge: "Ravin",
+  Tundra: "Tundra",
+  Isthmus: "Näs",
+  Depression: "Sänka",
+  Wetlands: "Våtmark",
+  Foothills: "Förberg",
+};
+const buildLandforms = () =>
+  buildAreas("ne_50m_geography_regions_polys", "public/data/landforms.geojson", (c) => LANDFORMS[c] ?? null);
+
+const MARINE = { ocean: "Ocean", sea: "Hav", bay: "Bukt", gulf: "Golf", strait: "Sund", channel: "Kanal", sound: "Sund", reef: "Rev" };
+const buildMarine = () =>
+  buildAreas("ne_50m_geography_marine_polys", "public/data/marine.geojson", (c) => MARINE[c] ?? null);
 
 const RIVER_CACHE = "scripts/.river-cache.json";
 
@@ -193,3 +237,6 @@ if (!only || only === "lakes") await buildLakes();
 if (!only || only === "mountains") await buildMountains();
 if (!only || only === "ranges") await buildRanges();
 if (!only || only === "rivers") await buildRivers();
+if (!only || only === "deserts") await buildDeserts();
+if (!only || only === "landforms") await buildLandforms();
+if (!only || only === "marine") await buildMarine();
