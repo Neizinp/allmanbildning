@@ -8,6 +8,11 @@
   <body>
     <div id="app">
       <div id="map"></div>
+      <div id="mode" role="group" aria-label="Läge">
+        <button type="button" data-mode="explore" class="active">Utforska</button>
+        <button type="button" data-mode="game">På Spåret</button>
+      </div>
+      <aside id="game" hidden></aside>
       <aside id="panel" hidden>
         <button id="panel-close" aria-label="Stäng">×</button>
         <div id="panel-content"></div>
