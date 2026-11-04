@@ -3,7 +3,7 @@ import type { Feature, FeatureCollection } from "geojson";
 import type { Info } from "./info";
 import { countryInfo } from "./countries";
 import { cityInfo, loadCities, type City } from "./cities";
-import { lakeInfo, loadMountains, mountainInfo, mountainMinZoom, type Mountain } from "./nature";
+import { namedInfo, loadMountains, mountainInfo, mountainMinZoom, type Mountain } from "./nature";
 
 const BASE: L.PathOptions = { color: "#6b7a8c", weight: 1, fillColor: "#e8e0c8", fillOpacity: 0.85 };
 const HOVER: L.PathOptions = { fillColor: "#f4d27a" };
@@ -12,9 +12,18 @@ const SELECTED: L.PathOptions = { fillColor: "#e8913a", weight: 2 };
 export async function createMap(el: HTMLElement, onSelect: (info: Info) => void): Promise<void> {
   const map = L.map(el, { worldCopyJump: true, minZoom: 2 }).setView([30, 10], 2);
   const json = (url: string) => fetch(url).then((r) => r.json());
-  const [data, lakes, cities, mountains]: [FeatureCollection, FeatureCollection, City[], Mountain[]] = await Promise.all([
+  const [data, lakes, ranges, rivers, cities, mountains]: [
+    FeatureCollection,
+    FeatureCollection,
+    FeatureCollection,
+    FeatureCollection,
+    City[],
+    Mountain[],
+  ] = await Promise.all([
     json("./data/countries.geojson"),
     json("./data/lakes.geojson"),
+    json("./data/ranges.geojson"),
+    json("./data/rivers.geojson"),
     loadCities(),
     loadMountains(),
   ]);
@@ -39,13 +48,34 @@ export async function createMap(el: HTMLElement, onSelect: (info: Info) => void)
     },
   }).addTo(map);
 
+  type Named = { name: string; title: string };
+  const selectable = (kind: string) => (feature: Feature, l: L.Layer) => {
+    const props = feature.properties as Named;
+    l.bindTooltip(props.name, { sticky: true }).on("click", () => select(null, namedInfo(kind)(props)));
+  };
+
+  const rangeLayer = L.geoJSON(ranges, {
+    style: { color: "#8a5a2b", weight: 1, fillColor: "#a47148", fillOpacity: 0.45, bubblingMouseEvents: false },
+    onEachFeature: selectable("Bergskedja"),
+  }).addTo(map);
+
   const lakeLayer = L.geoJSON(lakes, {
     style: { color: "#3b82b6", weight: 1, fillColor: "#7fb6e0", fillOpacity: 0.95, bubblingMouseEvents: false },
-    onEachFeature(feature: Feature, l) {
-      const props = feature.properties as { name: string; title: string };
-      l.bindTooltip(props.name, { sticky: true }).on("click", () => select(null, lakeInfo(props)));
-    },
+    onEachFeature: selectable("Sjö"),
   }).addTo(map);
+
+  const riverWeight = (rank: number) => (rank <= 2 ? 3 : rank <= 4 ? 2 : 1.5);
+  const riverLayer = L.layerGroup([
+    L.geoJSON(rivers, {
+      interactive: false,
+      style: (f) => ({ color: "#3b82b6", weight: riverWeight(f?.properties.rank) }),
+    }),
+    // Osynlig bred kopia som gör floderna lätta att träffa med fingret.
+    L.geoJSON(rivers, {
+      style: { color: "#000", weight: 14, opacity: 0, bubblingMouseEvents: false },
+      onEachFeature: selectable("Flod"),
+    }),
+  ]).addTo(map);
 
   // Punktlager där varje objekt har en lägsta zoomnivå.
   const gatedLayer = <T extends { name: string }>(items: T[], minZoom: (i: T) => number, make: (i: T) => L.Layer) => {
@@ -86,16 +116,22 @@ export async function createMap(el: HTMLElement, onSelect: (info: Info) => void)
       }).on("click", () => select(null, mountainInfo(m))),
   );
 
-  const overlays = { Städer: cityLayer, Sjöar: lakeLayer, Berg: mountainLayer };
+  const overlays = {
+    Städer: cityLayer,
+    Bergstoppar: mountainLayer,
+    Bergskedjor: rangeLayer,
+    Sjöar: lakeLayer,
+    Floder: riverLayer,
+  };
   L.control.layers(undefined, overlays, { collapsed: true }).addTo(map);
 
-  const STORAGE_KEY = "layers";
-  const saved: string[] | null = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
-  if (saved) for (const [name, layer] of Object.entries(overlays)) if (!saved.includes(name)) map.removeLayer(layer);
+  const STORAGE_KEY = "hiddenLayers";
+  const hidden: string[] = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]");
+  for (const [name, layer] of Object.entries(overlays)) if (hidden.includes(name)) map.removeLayer(layer);
   const persist = () =>
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify(Object.entries(overlays).filter(([, l]) => map.hasLayer(l)).map(([n]) => n)),
+      JSON.stringify(Object.entries(overlays).filter(([, l]) => !map.hasLayer(l)).map(([n]) => n)),
     );
   map.on("overlayadd overlayremove", persist);
 
