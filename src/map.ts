@@ -86,9 +86,18 @@ export async function createMap(el: HTMLElement, onSelect: (info: Info) => void)
       }).on("click", () => select(null, mountainInfo(m))),
   );
 
-  L.control
-    .layers(undefined, { Städer: cityLayer, Sjöar: lakeLayer, Berg: mountainLayer }, { collapsed: true })
-    .addTo(map);
+  const overlays = { Städer: cityLayer, Sjöar: lakeLayer, Berg: mountainLayer };
+  L.control.layers(undefined, overlays, { collapsed: true }).addTo(map);
+
+  const STORAGE_KEY = "layers";
+  const saved: string[] | null = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
+  if (saved) for (const [name, layer] of Object.entries(overlays)) if (!saved.includes(name)) map.removeLayer(layer);
+  const persist = () =>
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(Object.entries(overlays).filter(([, l]) => map.hasLayer(l)).map(([n]) => n)),
+    );
+  map.on("overlayadd overlayremove", persist);
 
   map.fitBounds(countryLayer.getBounds());
 }
