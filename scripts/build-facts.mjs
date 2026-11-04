@@ -10,9 +10,25 @@ const SV = "<https://sv.wikipedia.org/>";
 // Slag, krig, fördrag, revolutioner, belägringar, statskupper, jordbävningar, naturkatastrofer, terrordåd.
 const EVENT_CLASSES = "wd:Q178561 wd:Q198 wd:Q131569 wd:Q10931 wd:Q188055 wd:Q45382 wd:Q7944 wd:Q8065 wd:Q2223653";
 
+// Före detta stater vars medborgare ska räknas till dagens land (t.ex. Hitler var aldrig "tysk" i Wikidata, utan "Nazityskland").
+const PREDECESSORS = {
+  Q183: ["Q7318", "Q1206012", "Q43287", "Q713750", "Q16957", "Q41304"],
+  Q159: ["Q15180", "Q34266"],
+  Q38: ["Q2277", "Q172579"],
+  Q43: ["Q12560"],
+  Q40: ["Q131964", "Q533534"],
+  Q213: ["Q33946"],
+  Q214: ["Q33946"],
+  Q403: ["Q36704", "Q838261"],
+  Q17: ["Q188712"],
+  Q148: ["Q8733"],
+  Q145: ["Q174193", "Q179876"],
+};
+
 const peopleQuery = (prop, qid, limit, minLinks) => `
   SELECT ?p (SAMPLE(?ttl) AS ?t) (MAX(?links) AS ?l) (SAMPLE(?by) AS ?b) (SAMPLE(?dy) AS ?d) (SAMPLE(?desc) AS ?ds) WHERE {
-    ?p wdt:${prop} wd:${qid}; wdt:P31 wd:Q5; wikibase:sitelinks ?links. FILTER(?links >= ${minLinks})
+    VALUES ?place { ${[qid, ...(prop === "P27" ? (PREDECESSORS[qid] ?? []) : [])].map((q) => "wd:" + q).join(" ")} }
+    ?p wdt:${prop} ?place; wdt:P31 wd:Q5; wikibase:sitelinks ?links. FILTER(?links >= ${minLinks})
     ?a schema:about ?p; schema:isPartOf ${SV}; schema:name ?ttl.
     OPTIONAL { ?p wdt:P569 ?bd. BIND(YEAR(?bd) AS ?by) }
     OPTIONAL { ?p wdt:P570 ?dd. BIND(YEAR(?dd) AS ?dy) }
@@ -54,6 +70,18 @@ for (const qid of cities) {
 
 const cache = JSON.parse(await readFile(CACHE, "utf8").catch(() => "{}"));
 const todo = tasks.filter((t) => !(t.key in cache) && t.key);
+async function save() {
+  await writeFile(CACHE, JSON.stringify(cache));
+  const facts = {};
+  for (const qid of ids) {
+    const people = cache[`people:${qid}`] ?? [];
+    const events = cache[`events:${qid}`] ?? [];
+    if (people.length || events.length) facts[qid] = { people, events };
+  }
+  await writeFile("public/data/facts.json", JSON.stringify(facts));
+  return Object.keys(facts).length;
+}
+
 let done = 0;
 let failed = 0;
 
@@ -67,20 +95,11 @@ async function worker() {
       console.warn("misslyckades:", t.key, String(e.message).slice(0, 80));
     }
     if (++done % 10 === 0) {
-      await writeFile(CACHE, JSON.stringify(cache));
-      console.log(`${done}/${tasks.length - Object.keys(cache).length + done} klara`);
+      console.log(`${Object.keys(cache).length}/${tasks.length} svar, ${await save()} objekt i facts.json`);
     }
     await sleep(500);
   }
 }
 await Promise.all(Array.from({ length: CONCURRENCY }, worker));
-await writeFile(CACHE, JSON.stringify(cache));
+console.log("klart:", await save(), "objekt,", failed, "misslyckade");
 
-const facts = {};
-for (const qid of ids) {
-  const people = cache[`people:${qid}`] ?? [];
-  const events = cache[`events:${qid}`] ?? [];
-  if (people.length || events.length) facts[qid] = { people, events };
-}
-await writeFile("public/data/facts.json", JSON.stringify(facts));
-console.log("facts", Object.keys(facts).length, "objekt,", failed, "misslyckade");
