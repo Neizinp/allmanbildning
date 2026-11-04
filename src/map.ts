@@ -50,9 +50,22 @@ export async function createMap(el: HTMLElement, onSelect: (info: Info) => void)
 
   type Named = { name: string; title: string };
   const selectable = (kind: string) => (feature: Feature, l: L.Layer) => {
-    const props = feature.properties as Named;
-    l.bindTooltip(props.name, { sticky: true }).on("click", () => select(null, namedInfo(kind)(props)));
+    const props = feature.properties as Named & { kind?: string };
+    l.bindTooltip(props.name, { sticky: true }).on("click", () => select(null, namedInfo(props.kind ?? kind)(props)));
   };
+
+  const area = async (file: string, color: string, fill: string, fillOpacity: number, options: L.GeoJSONOptions = {}) =>
+    L.geoJSON((await json(`./data/${file}.geojson`)) as FeatureCollection, {
+      style: { color, weight: 1, fillColor: fill, fillOpacity, bubblingMouseEvents: false },
+      onEachFeature: selectable(""),
+      ...options,
+    });
+
+  map.createPane("marine").style.zIndex = "250";
+  const marineLayer = (await area("marine", "#4a90c2", "#8fbfe3", 0.4, { pane: "marine" })).addTo(map);
+  const landformLayer = (await area("landforms", "#7b6aa8", "#9a8cc4", 0.25)).addTo(map);
+  const desertLayer = (await area("deserts", "#c79a2e", "#e9c46a", 0.5)).addTo(map);
+  const rainforestLayer = (await area("rainforests", "#1e6b3a", "#3f9a5b", 0.5)).addTo(map);
 
   const rangeLayer = L.geoJSON(ranges, {
     style: { color: "#8a5a2b", weight: 1, fillColor: "#a47148", fillOpacity: 0.45, bubblingMouseEvents: false },
@@ -120,13 +133,17 @@ export async function createMap(el: HTMLElement, onSelect: (info: Info) => void)
     Städer: cityLayer,
     Bergstoppar: mountainLayer,
     Bergskedjor: rangeLayer,
+    Öknar: desertLayer,
+    Regnskogar: rainforestLayer,
+    Landformer: landformLayer,
+    "Hav och sund": marineLayer,
     Sjöar: lakeLayer,
     Floder: riverLayer,
   };
   L.control.layers(undefined, overlays, { collapsed: true }).addTo(map);
 
   const STORAGE_KEY = "hiddenLayers";
-  const hidden: string[] = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]");
+  const hidden: string[] = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '["Landformer"]');
   for (const [name, layer] of Object.entries(overlays)) if (hidden.includes(name)) map.removeLayer(layer);
   const persist = () =>
     localStorage.setItem(
