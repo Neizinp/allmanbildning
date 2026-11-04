@@ -23,6 +23,23 @@ async function svTitles(ids) {
   return new Map(ids.filter((id) => cache[id]).map((id) => [id, cache[id]]));
 }
 
+// Senast daterade befolkningssiffran per objekt från Wikidata (P1082 med tidpunkt P585).
+async function latestPopulation(qids) {
+  const rows = await sparql(`
+    SELECT ?c ?pop ?date WHERE {
+      VALUES ?c { ${qids.map((q) => `wd:${q}`).join(" ")} }
+      ?c p:P1082 ?st. ?st ps:P1082 ?pop; pq:P585 ?date.
+      ?st wikibase:rank ?rk. FILTER(?rk != wikibase:DeprecatedRank)
+    }`);
+  const best = new Map();
+  for (const r of rows) {
+    const q = r.c.split("/").pop();
+    const year = Number(r.date.slice(0, 4));
+    if (year >= 2005 && (!best.has(q) || year > best.get(q).year)) best.set(q, { pop: Math.round(Number(r.pop)), year });
+  }
+  return best;
+}
+
 async function buildCities() {
   const { features } = await load("ne_50m_populated_places");
   const sorted = features
@@ -32,8 +49,10 @@ async function buildCities() {
   const titles = await svTitles(picked.map((p) => p.WIKIDATAID));
   const countries = JSON.parse(await readFile("public/data/countries.geojson", "utf8"));
   const svCountry = new Map(countries.features.map((f) => [f.properties.NAME, f.properties.NAME_SV]));
+  const populations = await latestPopulation(picked.map((p) => p.WIKIDATAID));
   const cities = picked.map((p, i) => {
     const title = titles.get(p.WIKIDATAID);
+    const wd = populations.get(p.WIKIDATAID);
     const name = title ? title.replace(/ \(.*\)$/, "") : (p.NAME_SV ?? p.NAME);
     return {
       name,
@@ -41,7 +60,8 @@ async function buildCities() {
       qid: p.WIKIDATAID,
       lat: p.LATITUDE,
       lon: p.LONGITUDE,
-      pop: p.POP_MAX,
+      pop: wd?.pop ?? p.POP_MAX,
+      popYear: wd?.year ?? null,
       country: svCountry.get(p.ADM0NAME) ?? p.ADM0NAME,
       capital: p.ADM0CAP === 1,
       z: i < 60 ? 2 : i < 200 || p.ADM0CAP === 1 ? 3 : 4,
