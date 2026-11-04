@@ -37,6 +37,20 @@ export const countyInfo = (p: CountyProps): Info => ({
   showWikiImage: true,
 });
 
+export interface ProvinceProps {
+  name: string;
+  title: string;
+  landsdel: string;
+}
+
+export const provinceInfo = (p: ProvinceProps): Info => ({
+  name: p.name,
+  subtitle: `Landskap i ${p.landsdel}`,
+  facts: [],
+  wikiTitle: p.title,
+  showWikiImage: true,
+});
+
 export const namedInfo =
   (subtitle: string) =>
   (p: { name: string; title: string }): Info => ({

@@ -3,6 +3,8 @@ import L from "leaflet";
 export interface LayerGroupSpec {
   title: string;
   layers: Record<string, L.Layer>;
+  // Högst ett lager i gruppen kan vara tänt samtidigt.
+  exclusive?: boolean;
 }
 
 const STORAGE_KEY = "hiddenLayers";
@@ -28,7 +30,7 @@ class LayerControl extends L.Control {
     toggle.addEventListener("click", () => (body.hidden = !body.hidden));
 
     const actions = L.DomUtil.create("div", "layer-actions", body);
-    const boxes: { name: string; layer: L.Layer; input: HTMLInputElement }[] = [];
+    const boxes: { name: string; layer: L.Layer; input: HTMLInputElement; group: LayerGroupSpec }[] = [];
 
     const persist = () =>
       localStorage.setItem(STORAGE_KEY, JSON.stringify(boxes.filter((b) => !b.input.checked).map((b) => b.name)));
@@ -38,6 +40,7 @@ class LayerControl extends L.Control {
     };
     const setAll = (checked: boolean) => {
       for (const b of boxes) {
+        if (checked && b.group.exclusive) continue;
         b.input.checked = checked;
         apply(b);
       }
@@ -64,10 +67,20 @@ class LayerControl extends L.Control {
         input.type = "checkbox";
         input.checked = !hidden.includes(name);
         row.append(name);
-        const box = { name, layer, input };
+        const box = { name, layer, input, group };
+        const rivals = boxes.filter((b) => b.group === group && b.input.checked);
+        if (group.exclusive && input.checked && rivals.length) input.checked = false;
         boxes.push(box);
         apply(box);
         input.addEventListener("change", () => {
+          if (group.exclusive && input.checked) {
+            for (const other of boxes) {
+              if (other !== box && other.group === group && other.input.checked) {
+                other.input.checked = false;
+                apply(other);
+              }
+            }
+          }
           apply(box);
           persist();
         });

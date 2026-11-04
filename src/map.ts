@@ -5,7 +5,7 @@ import { countryInfo, type CountryFacts } from "./countries";
 import { addLayerControl } from "./layer-control";
 import { addHomeControl } from "./home-control";
 import { cityInfo, loadCities, type City } from "./cities";
-import { countyInfo, type CountyProps, namedInfo, loadMountains, mountainInfo, mountainMinZoom, loadVolcanoes, volcanoInfo, loadHeritage, heritageInfo, type Mountain, type Volcano, type HeritageSite } from "./nature";
+import { countyInfo, provinceInfo, type CountyProps, type ProvinceProps, namedInfo, loadMountains, mountainInfo, mountainMinZoom, loadVolcanoes, volcanoInfo, loadHeritage, heritageInfo, type Mountain, type Volcano, type HeritageSite } from "./nature";
 
 const BASE: L.PathOptions = {
   color: "#6b7a8c",
@@ -76,20 +76,23 @@ export async function createMap(
     },
   }).addTo(map);
 
-  // Länen ligger direkt ovanpå länderna så att övriga lager hamnar ovanför och förblir klickbara.
-  const countyLayer = L.geoJSON((await json("./data/sweden-counties.geojson")) as FeatureCollection, {
-    style: { color: "#7d8a99", weight: 1, dashArray: "4 3", fillColor: "#fff", fillOpacity: 0, bubblingMouseEvents: false },
-    onEachFeature(feature: Feature, l) {
-      const props = feature.properties as CountyProps;
-      const path = l as L.Path;
-      l.bindTooltip(props.name, { sticky: true });
-      path.on({
-        mouseover: () => path.setStyle({ fillOpacity: 0.2 }),
-        mouseout: () => path.setStyle({ fillOpacity: 0 }),
-        click: () => select(null, countyInfo(props)),
-      });
-    },
-  }).addTo(map);
+  // Län och landskap ligger direkt ovanpå länderna så att övriga lager hamnar ovanför och förblir klickbara.
+  const adminLayer = async <P extends { name: string }>(file: string, color: string, info: (p: P) => Info) =>
+    L.geoJSON((await json(`./data/${file}.geojson`)) as FeatureCollection, {
+      style: { color, weight: 1, dashArray: "4 3", fillColor: "#fff", fillOpacity: 0, bubblingMouseEvents: false },
+      onEachFeature(feature: Feature, l) {
+        const props = feature.properties as P;
+        const path = l as L.Path;
+        l.bindTooltip(props.name, { sticky: true });
+        path.on({
+          mouseover: () => path.setStyle({ fillOpacity: 0.2 }),
+          mouseout: () => path.setStyle({ fillOpacity: 0 }),
+          click: () => select(null, info(props)),
+        });
+      },
+    });
+  const countyLayer = (await adminLayer<CountyProps>("sweden-counties", "#7d8a99", countyInfo)).addTo(map);
+  const provinceLayer = await adminLayer<ProvinceProps>("sweden-provinces", "#9a6b3f", provinceInfo);
 
   type Named = { name: string; title: string };
   const selectable = (kind: string) => (feature: Feature, l: L.Layer) => {
@@ -210,7 +213,7 @@ export async function createMap(
         Landformer: landformLayer,
       },
     },
-    { title: "Sverige", layers: { Län: countyLayer } },
+    { title: "Sverige", layers: { Län: countyLayer, Landskap: provinceLayer }, exclusive: true },
   ]);
 
   map.fitBounds(countryLayer.getBounds());
