@@ -117,7 +117,12 @@ export async function createMap(
   const marineLayer = (
     await area("marine", "#4a90c2", "#8fbfe3", 0.4, {
       pane: "marine",
-      style: { weight: 0, fillColor: "#8fbfe3", fillOpacity: 0.4, bubblingMouseEvents: false },
+      style: (feature) => ({
+        weight: 0,
+        fillColor: feature?.properties.color ?? "#8fbfe3",
+        fillOpacity: 0.78,
+        bubblingMouseEvents: false,
+      }),
     })
   ).addTo(map);
   const landformLayer = (await area("landforms", "#7b6aa8", "#9a8cc4", 0.25)).addTo(map);
