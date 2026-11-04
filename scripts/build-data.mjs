@@ -468,26 +468,120 @@ async function buildWorld() {
 const PROVINCES_URL = "https://raw.githubusercontent.com/perliedman/svenska-landskap/master/svenska-landskap-klippt.geo.json";
 const PROVINCE_TITLES = { Lappland: "Lappland, Sverige" };
 
+const stripHtml = (h) =>
+  h
+    .replace(/<sup[\s\S]*?<\/sup>/g, "")
+    .replace(/<style[\s\S]*?<\/style>/g, "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&#160;|&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+// Läser landskapsdjur och landskapsblomma ur artikelns faktaruta; första värdet om flera anges.
+async function infoboxSymbols(title) {
+  const j = await wikiJson(
+    `https://sv.wikipedia.org/w/api.php?action=parse&format=json&formatversion=2&prop=text&redirects=1&page=${encodeURIComponent(title)}`,
+  );
+  const symbols = {};
+  for (const m of j.parse.text.matchAll(/<tr[\s\S]*?<\/tr>/g)) {
+    const cells = [...m[0].matchAll(/<t[dh][\s\S]*?<\/t[dh]>/g)].map((c) => stripHtml(c[0]));
+    const kind = /^Landskaps(djur|blomma)/i.exec(cells[0] ?? "")?.[1]?.toLowerCase();
+    if (kind && cells[1]) symbols[kind] = cells[1].split(/,|\//)[0].replace(/\s*\(.*\)$/, "").trim();
+  }
+  return symbols;
+}
+
+const commonsUrl = (file, width) =>
+  `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(file.replaceAll(" ", "_"))}?width=${width}`;
+// Handvalda landmärken som ger ett representativt foto för varje landskap (artikelns huvudbild används).
+const PHOTO_ARTICLES = {
+  Skåne: "Kullaberg",
+  Blekinge: "Karlskrona",
+  Öland: "Stora alvaret",
+  Halland: "Varbergs fästning",
+  Småland: "Kosta glasbruk",
+  Gotland: "Visby ringmur",
+  Västergötland: "Läckö slott",
+  Östergötland: "Vadstena slott",
+  Bohuslän: "Smögen",
+  Dalsland: "Håverud",
+  Närke: "Örebro slott",
+  Södermanland: "Gripsholms slott",
+  Värmland: "Mårbacka",
+  Västmanland: "Anundshög",
+  Uppland: "Uppsala domkyrka",
+  Gästrikland: "Gävle slott",
+  Dalarna: "Falu koppargruva",
+  Hälsingland: "Hälsingegårdar",
+  Härjedalen: "Helagsfjället",
+  Ångermanland: "Skuleberget",
+  Jämtland: "Tännforsen",
+  Västerbotten: "Vindelfjällens naturreservat",
+  Lappland: "Lapporten",
+  Norrbotten: "Gammelstads kyrkstad",
+};
+// Där landmärkets huvudbild inte duger anges bildfilen direkt.
+const PHOTO_FILES = { Medelpad: "Högomfältet panorama.jpg" };
+
+async function leadPhotos() {
+  const titles = Object.values(PHOTO_ARTICLES);
+  const j = await wikiJson(
+    "https://sv.wikipedia.org/w/api.php?action=query&format=json&formatversion=2&redirects=1&prop=pageimages&piprop=name" +
+      `&titles=${encodeURIComponent(titles.join("|"))}`,
+  );
+  const redirects = new Map((j.query.redirects ?? []).map((r) => [r.from, r.to]));
+  const image = new Map(j.query.pages.map((p) => [p.title, p.pageimage ?? null]));
+  const out = { ...PHOTO_FILES };
+  for (const [name, title] of Object.entries(PHOTO_ARTICLES)) out[name] = image.get(redirects.get(title) ?? title)?.replaceAll("_", " ") ?? null;
+  return out;
+}
+
 async function buildProvinces() {
   const { features } = await (await fetch(PROVINCES_URL)).json();
   const names = features.map((f) => f.properties.landskap);
   const wanted = names.map((n) => PROVINCE_TITLES[n] ?? n);
   const q = await wikiJson(
-    "https://sv.wikipedia.org/w/api.php?action=query&format=json&formatversion=2&redirects=1&prop=pageprops&ppprop=disambiguation" +
+    "https://sv.wikipedia.org/w/api.php?action=query&format=json&formatversion=2&redirects=1&prop=pageprops&ppprop=disambiguation|wikibase_item" +
       `&titles=${encodeURIComponent(wanted.join("|"))}`,
   );
   const redirects = new Map((q.query.redirects ?? []).map((r) => [r.from, r.to]));
   const pages = new Map(q.query.pages.map((p) => [p.title, p]));
-  const out = features.map((f, i) => {
+
+  // Vapen (P94) från Wikidata.
+  const qids = wanted.map((w) => pages.get(redirects.get(w) ?? w)?.pageprops?.wikibase_item);
+  const wd = await wikiJson(
+    `https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&props=claims&ids=${qids.filter(Boolean).join("|")}`,
+  );
+  const crestFile = (qid) => wd.entities?.[qid]?.claims?.P94?.[0]?.mainsnak?.datavalue?.value ?? null;
+
+  const photos = await leadPhotos();
+  const out = [];
+  for (const [i, f] of features.entries()) {
     const title = redirects.get(wanted[i]) ?? wanted[i];
     const page = pages.get(title);
     if (!page || page.missing || page.pageprops?.disambiguation !== undefined) console.warn("saknar bra artikel:", wanted[i]);
-    return {
+    const symbols = await infoboxSymbols(title);
+    await sleep(700);
+    const photo = photos[names[i]];
+    const crest = crestFile(qids[i]);
+    if (!photo) console.warn("saknar foto:", names[i]);
+    if (!crest) console.warn("saknar vapen:", names[i]);
+    if (!symbols.djur || !symbols.blomma) console.warn("saknar djur/blomma:", names[i], symbols);
+    out.push({
       type: "Feature",
-      properties: { name: f.properties.landskap, title, landsdel: f.properties.landsdel },
+      properties: {
+        name: names[i],
+        title,
+        landsdel: f.properties.landsdel,
+        djur: symbols.djur ?? null,
+        blomma: symbols.blomma ?? null,
+        vapen: crest ? commonsUrl(crest, 200) : null,
+        foto: photo ? commonsUrl(photo, 640) : null,
+        fotoFil: photo,
+      },
       geometry: { type: f.geometry.type, coordinates: roundDeep(f.geometry.coordinates, 3) },
-    };
-  });
+    });
+  }
   await writeFile("public/data/sweden-provinces.geojson", JSON.stringify({ type: "FeatureCollection", features: out }));
   console.log("landskap", out.length);
 }
