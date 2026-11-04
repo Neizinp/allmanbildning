@@ -464,6 +464,34 @@ async function buildWorld() {
   console.log("countries", features.length);
 }
 
+// Landskapsgränser från Lantmäteriets distriktskarta (CC0), klippta mot kustlinjen.
+const PROVINCES_URL = "https://raw.githubusercontent.com/perliedman/svenska-landskap/master/svenska-landskap-klippt.geo.json";
+const PROVINCE_TITLES = { Lappland: "Lappland, Sverige" };
+
+async function buildProvinces() {
+  const { features } = await (await fetch(PROVINCES_URL)).json();
+  const names = features.map((f) => f.properties.landskap);
+  const wanted = names.map((n) => PROVINCE_TITLES[n] ?? n);
+  const q = await wikiJson(
+    "https://sv.wikipedia.org/w/api.php?action=query&format=json&formatversion=2&redirects=1&prop=pageprops&ppprop=disambiguation" +
+      `&titles=${encodeURIComponent(wanted.join("|"))}`,
+  );
+  const redirects = new Map((q.query.redirects ?? []).map((r) => [r.from, r.to]));
+  const pages = new Map(q.query.pages.map((p) => [p.title, p]));
+  const out = features.map((f, i) => {
+    const title = redirects.get(wanted[i]) ?? wanted[i];
+    const page = pages.get(title);
+    if (!page || page.missing || page.pageprops?.disambiguation !== undefined) console.warn("saknar bra artikel:", wanted[i]);
+    return {
+      type: "Feature",
+      properties: { name: f.properties.landskap, title, landsdel: f.properties.landsdel },
+      geometry: { type: f.geometry.type, coordinates: roundDeep(f.geometry.coordinates, 3) },
+    };
+  });
+  await writeFile("public/data/sweden-provinces.geojson", JSON.stringify({ type: "FeatureCollection", features: out }));
+  console.log("landskap", out.length);
+}
+
 async function buildCounties() {
   const { features } = await load("ne_10m_admin_1_states_provinces");
   const counties = features.filter((f) => f.properties.admin === "Sweden");
@@ -509,3 +537,4 @@ if (!only || only === "volcanoes") await buildVolcanoes();
 if (!only || only === "heritage") await buildHeritage();
 if (only === "world") await buildWorld();
 if (only === "counties") await buildCounties();
+if (only === "provinces") await buildProvinces();
