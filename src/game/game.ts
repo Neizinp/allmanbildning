@@ -7,6 +7,7 @@ import type { Clue, Target } from "./types";
 
 const ROUNDS = 10;
 const STORAGE_KEY = "paSparetStats";
+const CITIES_KEY = "paSparetCities";
 const CATEGORIES = ["Sverige", "Städer i världen", "Länder"] as const;
 type Category = (typeof CATEGORIES)[number];
 
@@ -58,6 +59,7 @@ export function initGame(api: MapApi, showInfo: (info: Info) => void, hideInfo: 
   const card = document.getElementById("game")!;
   const modeButtons = document.querySelectorAll<HTMLButtonElement>("#mode button");
 
+  let showCities = localStorage.getItem(CITIES_KEY) === "1";
   let active = false;
   let phase: "start" | "loading" | "round" | "end" = "start";
   let score = 0;
@@ -203,6 +205,20 @@ export function initGame(api: MapApi, showInfo: (info: Info) => void, hideInfo: 
     return li;
   }
 
+  function citiesToggle() {
+    const label = el("label", "toggle");
+    const input = el("input");
+    input.type = "checkbox";
+    input.checked = showCities;
+    input.addEventListener("change", () => {
+      showCities = input.checked;
+      localStorage.setItem(CITIES_KEY, showCities ? "1" : "0");
+      api.showCities(showCities);
+    });
+    label.append(input, " Visa städer på kartan (klicka på en stad för att gissa)");
+    return label;
+  }
+
   function renderStart() {
     const stats = loadStats();
     card.append(el("h2", "", "På Spåret"));
@@ -218,6 +234,7 @@ export function initGame(api: MapApi, showInfo: (info: Info) => void, hideInfo: 
       card.append(el("p", "muted", `Bästa omgång: ${Math.max(...stats.games)} p · snitt ${fmt(average(stats.games))} p (${stats.games.length} omgångar)`));
       card.append(statsTable(stats));
     }
+    card.append(citiesToggle());
     card.append(button("Starta", startGame, "primary"));
   }
 
@@ -226,6 +243,7 @@ export function initGame(api: MapApi, showInfo: (info: Info) => void, hideInfo: 
     const head = el("div", "game-head");
     head.append(el("span", "", `Fråga ${roundNo}/${ROUNDS}`), el("span", "", `Poäng: ${score}`));
     card.append(head);
+    card.append(citiesToggle());
 
     const list = el("ol", "clues");
     round.clues.slice(0, round.shown).forEach((c, i) => list.append(clueItem(c, !round!.done && i === round!.shown - 1)));
@@ -291,6 +309,7 @@ export function initGame(api: MapApi, showInfo: (info: Info) => void, hideInfo: 
     if (game) {
       phase = "start";
       api.enterGame(onGuess);
+      api.showCities(showCities);
       render();
     } else {
       api.exitGame();

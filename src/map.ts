@@ -23,6 +23,7 @@ export interface MapApi {
   data: GameData;
   enterGame: (onGuess: (latlng: L.LatLng) => void) => void;
   exitGame: () => void;
+  showCities: (show: boolean) => void;
   reveal: (target: Target, guess: L.LatLng | null) => void;
   resetAnswer: () => void;
   home: () => void;
@@ -164,7 +165,7 @@ export async function createMap(
         fillColor: c.capital ? "#c0392b" : "#2c3e50",
         fillOpacity: 1,
         bubblingMouseEvents: false,
-      }).on("click", () => select(null, cityInfo(c))),
+      }).on("click", () => (gameHandler ? gameHandler(L.latLng(c.lat, c.lon)) : select(null, cityInfo(c)))),
   );
 
   const mountainLayer = gatedLayer(
@@ -278,9 +279,12 @@ export async function createMap(
     document.body.classList.add("game-mode");
   };
 
+  const showCities = (show: boolean) => (show ? map.addLayer(cityLayer) : map.removeLayer(cityLayer));
+
   const exitGame = () => {
     gameHandler = null;
     resetAnswer();
+    for (const l of overlays) map.removeLayer(l);
     for (const l of hiddenByGame) map.addLayer(l);
     hiddenByGame = [];
     document.body.classList.remove("game-mode");
@@ -293,6 +297,7 @@ export async function createMap(
     clear,
     enterGame,
     exitGame,
+    showCities,
     reveal,
     resetAnswer,
     home: () => map.fitBounds(countryLayer.getBounds()),

@@ -123,3 +123,4 @@ body.game-mode .layer-control { display: none; }
   #game { top: 3.5rem; left: .5rem; right: .5rem; max-height: 38vh; border-radius: 12px; }
   body.game-mode #panel { max-height: 40vh; }
 }
+#game .toggle { display: flex; gap: .4rem; align-items: center; margin: .4rem 0; font-size: .9rem; cursor: pointer; }
