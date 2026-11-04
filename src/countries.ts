@@ -19,7 +19,7 @@ export function countryInfo(p: Record<string, unknown>, extra?: CountryFacts): I
   const iso = String(p.ISO_A2_EH);
   const rows: [string, string | null][] = [
     ["Huvudstad", list(extra?.capital ?? [])],
-    ["Befolkning", formatNumber(Number(p.POP_EST))],
+    ["Befolkning", `${formatNumber(Number(p.POP_EST))} (${p.POP_YEAR})`],
     ["Språk", list(extra?.languages ?? [])],
     ["Valuta", list(extra?.currency ?? [])],
     ["Statsskick", extra?.government ? capitalize(extra.government) : null],

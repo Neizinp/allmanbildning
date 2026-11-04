@@ -8,6 +8,7 @@ export interface City {
   lat: number;
   lon: number;
   pop: number;
+  popYear: number | null;
   country: string;
   capital: boolean;
   z: number;
@@ -18,7 +19,7 @@ export const loadCities = async (): Promise<City[]> => (await fetch("./data/citi
 export const cityInfo = (c: City): Info => ({
   name: c.name,
   subtitle: c.capital ? `Huvudstad i ${c.country}` : c.country,
-  facts: [["Befolkning", formatNumber(c.pop)]],
+  facts: [["Befolkning", c.popYear ? `${formatNumber(c.pop)} (${c.popYear})` : formatNumber(c.pop)]],
   wikiTitle: c.title,
   qid: c.qid,
   showWikiImage: true,
