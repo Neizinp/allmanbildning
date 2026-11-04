@@ -2,3 +2,4 @@ node_modules
 dist
 *.local
 scripts/.wikidata-cache.json
+scripts/.river-cache.json

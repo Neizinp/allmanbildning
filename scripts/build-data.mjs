@@ -7,6 +7,18 @@ const load = async (name) => (await fetch(`${NE}/${name}.geojson`)).json();
 const CACHE = "scripts/.wikidata-cache.json";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+async function wikiJson(url) {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(url, { headers: { "User-Agent": "allmanbildning-build/0.1 (github.com/Neizinp/allmanbildning)" } });
+    try {
+      return await res.json();
+    } catch {
+      if (attempt >= 5) throw new Error("Wikipedia/Wikidata svarar inte");
+      await sleep(5000 * (attempt + 1));
+    }
+  }
+}
+
 async function svTitles(ids) {
   const cache = JSON.parse(await readFile(CACHE, "utf8").catch(() => "{}"));
   const todo = [...new Set(ids.filter((id) => id && !(id in cache)))];
@@ -15,16 +27,7 @@ async function svTitles(ids) {
     const url =
       "https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&props=sitelinks" +
       `&sitefilter=svwiki&ids=${chunk.join("|")}`;
-    let j;
-    for (let attempt = 0; !j; attempt++) {
-      const res = await fetch(url, { headers: { "User-Agent": "allmanbildning-build/0.1 (github.com/Neizinp/allmanbildning)" } });
-      try {
-        j = await res.json();
-      } catch {
-        if (attempt >= 5) throw new Error("Wikidata svarar inte");
-        await sleep(5000 * (attempt + 1));
-      }
-    }
+    const j = await wikiJson(url);
     for (const id of chunk) cache[id] = j.entities?.[id]?.sitelinks?.svwiki?.title ?? null;
     await writeFile(CACHE, JSON.stringify(cache));
     await sleep(1000);
@@ -96,7 +99,97 @@ async function buildMountains() {
   console.log("mountains", mountains.length);
 }
 
+async function buildRanges() {
+  const { features } = await load("ne_50m_geography_regions_polys");
+  const ranges = features.filter((f) => f.properties.FEATURECLA === "Range/mtn" && f.properties.WIKIDATAID);
+  const titles = await svTitles(ranges.map((f) => f.properties.WIKIDATAID));
+  const out = ranges.map((f) => {
+    const p = f.properties;
+    const title = titles.get(p.WIKIDATAID);
+    const name = displayName(title, p.NAME_SV ?? p.NAME_EN ?? p.NAME);
+    return {
+      type: "Feature",
+      properties: { name, title: title ?? name },
+      geometry: { type: f.geometry.type, coordinates: roundCoords(f.geometry.coordinates) },
+    };
+  });
+  await writeFile("public/data/ranges.geojson", JSON.stringify({ type: "FeatureCollection", features: out }));
+  console.log("ranges", out.length);
+}
+
+const RIVER_CACHE = "scripts/.river-cache.json";
+
+// Slår upp svenska titlar för engelska flodnamn via engelska Wikipedias språklänkar.
+async function riverTitles(names) {
+  const cache = JSON.parse(await readFile(RIVER_CACHE, "utf8").catch(() => "{}"));
+  const todo = names.filter((n) => !(n in cache));
+  const candidates = (n) => [`${n} River`, `${n} (river)`];
+  for (let i = 0; i < todo.length; i += 15) {
+    const chunk = todo.slice(i, i + 15);
+    const titles = chunk.flatMap(candidates);
+    const url =
+      "https://en.wikipedia.org/w/api.php?action=query&format=json&formatversion=2&redirects=1" +
+      `&prop=langlinks|pageprops&lllang=sv&ppprop=disambiguation|wikibase-shortdesc&titles=${encodeURIComponent(titles.join("|"))}`;
+    const q = (await wikiJson(url)).query ?? {};
+    const alias = new Map();
+    for (const r of [...(q.normalized ?? []), ...(q.redirects ?? [])]) alias.set(r.from, r.to);
+    const resolve = (t) => {
+      for (let k = 0; k < 3 && alias.has(t); k++) t = alias.get(t);
+      return t;
+    };
+    const pages = new Map((q.pages ?? []).map((pg) => [pg.title, pg]));
+    for (const n of chunk) {
+      cache[n] = null;
+      for (const c of candidates(n)) {
+        const pg = pages.get(resolve(c));
+        if (!pg || pg.missing || pg.pageprops?.disambiguation !== undefined) continue;
+        if (!/river|tributary|stream|waterway|canal/i.test(pg.pageprops?.["wikibase-shortdesc"] ?? "")) continue;
+        const sv = pg.langlinks?.[0]?.title;
+        if (sv) {
+          cache[n] = sv;
+          break;
+        }
+      }
+    }
+    await writeFile(RIVER_CACHE, JSON.stringify(cache));
+    await sleep(500);
+  }
+  return cache;
+}
+
+async function buildRivers() {
+  const { features } = await load("ne_10m_rivers_lake_centerlines");
+  const byName = new Map();
+  for (const f of features) {
+    const p = f.properties;
+    if (p.featurecla !== "River" || !p.name_en || p.scalerank > 7) continue;
+    const lines = f.geometry.type === "LineString" ? [f.geometry.coordinates] : f.geometry.coordinates;
+    const e = byName.get(p.name_en) ?? { rank: p.scalerank, lines: [] };
+    e.rank = Math.min(e.rank, p.scalerank);
+    e.lines.push(...lines);
+    byName.set(p.name_en, e);
+  }
+  const names = [...byName.keys()];
+  const titles = await riverTitles(names);
+  const byTitle = new Map();
+  for (const n of names.filter((n) => titles[n])) {
+    const e = byTitle.get(titles[n]) ?? { rank: 9, lines: [] };
+    e.rank = Math.min(e.rank, byName.get(n).rank);
+    e.lines.push(...byName.get(n).lines);
+    byTitle.set(titles[n], e);
+  }
+  const out = [...byTitle].map(([title, e]) => ({
+    type: "Feature",
+    properties: { name: displayName(title), title, rank: e.rank },
+    geometry: { type: "MultiLineString", coordinates: roundCoords(e.lines) },
+  }));
+  await writeFile("public/data/rivers.geojson", JSON.stringify({ type: "FeatureCollection", features: out }));
+  console.log("rivers", out.length, "av", names.length);
+}
+
 const only = process.argv[2];
 if (!only || only === "cities") await buildCities();
 if (!only || only === "lakes") await buildLakes();
 if (!only || only === "mountains") await buildMountains();
+if (!only || only === "ranges") await buildRanges();
+if (!only || only === "rivers") await buildRivers();
