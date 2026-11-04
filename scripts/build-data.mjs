@@ -59,5 +59,44 @@ async function buildCities() {
   console.log("cities", cities.length);
 }
 
+const round = (n) => Math.round(n * 100) / 100;
+const roundCoords = (c) => (typeof c[0] === "number" ? c.map(round) : c.map(roundCoords));
+const displayName = (title, fallback) => (title ? title.replace(/ \(.*\)$/, "") : fallback);
+
+async function buildLakes() {
+  const { features } = await load("ne_50m_lakes");
+  const named = features.filter((f) => f.properties.name && f.properties.wikidataid);
+  const titles = await svTitles(named.map((f) => f.properties.wikidataid));
+  const lakes = named.map((f) => {
+    const p = f.properties;
+    const title = titles.get(p.wikidataid);
+    const name = displayName(title, p.name_sv ?? p.name_en ?? p.name);
+    return {
+      type: "Feature",
+      properties: { name, title: title ?? name },
+      geometry: { type: f.geometry.type, coordinates: roundCoords(f.geometry.coordinates) },
+    };
+  });
+  await writeFile("public/data/lakes.geojson", JSON.stringify({ type: "FeatureCollection", features: lakes }));
+  console.log("lakes", lakes.length);
+}
+
+async function buildMountains() {
+  const { features } = await load("ne_10m_geography_regions_elevation_points");
+  const named = features.filter((f) => f.properties.name && f.properties.wikidataid);
+  const titles = await svTitles(named.map((f) => f.properties.wikidataid));
+  const mountains = named.map((f) => {
+    const p = f.properties;
+    const title = titles.get(p.wikidataid);
+    const name = displayName(title, p.name_sv ?? p.name_en ?? p.name);
+    const [lon, lat] = f.geometry.coordinates;
+    return { name, title: title ?? name, lat: round(lat), lon: round(lon), elevation: p.elevation };
+  });
+  await writeFile("public/data/mountains.json", JSON.stringify(mountains));
+  console.log("mountains", mountains.length);
+}
+
 const only = process.argv[2];
 if (!only || only === "cities") await buildCities();
+if (!only || only === "lakes") await buildLakes();
+if (!only || only === "mountains") await buildMountains();
