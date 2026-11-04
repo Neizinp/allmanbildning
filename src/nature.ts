@@ -28,3 +28,42 @@ export const namedInfo =
   });
 
 export const mountainMinZoom = (m: Mountain) => (m.elevation >= 5000 ? 3 : m.elevation >= 3500 ? 4 : 5);
+
+export interface Volcano {
+  name: string;
+  title: string;
+  lat: number;
+  lon: number;
+  country: string | null;
+  elevation: number | null;
+  z: number;
+}
+
+export interface HeritageSite {
+  name: string;
+  title: string;
+  lat: number;
+  lon: number;
+  country: string | null;
+  z: number;
+}
+
+const loadJson = <T>(file: string): Promise<T> => fetch(`./data/${file}.json`).then((r) => r.json());
+export const loadVolcanoes = () => loadJson<Volcano[]>("volcanoes");
+export const loadHeritage = () => loadJson<HeritageSite[]>("heritage");
+
+export const volcanoInfo = (v: Volcano): Info => ({
+  name: v.name,
+  subtitle: v.country ? `Vulkan i ${v.country}` : "Vulkan",
+  facts: v.elevation ? [["Höjd", `${formatNumber(v.elevation)} m ö.h.`]] : [],
+  wikiTitle: v.title,
+  showWikiImage: true,
+});
+
+export const heritageInfo = (h: HeritageSite): Info => ({
+  name: h.name,
+  subtitle: h.country ? `Världsarv i ${h.country}` : "Världsarv",
+  facts: [],
+  wikiTitle: h.title,
+  showWikiImage: true,
+});

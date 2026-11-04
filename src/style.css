@@ -41,3 +41,5 @@ body { font-family: system-ui, sans-serif; color: #1c2430; }
 #panel .image img { display: block; max-width: 100%; border-radius: 8px; margin: 0 0 .75rem; }
 #panel .image .flag { max-height: 120px; border: 1px solid #d5dae0; }
 #panel .image .photo { width: 100%; max-height: 220px; object-fit: cover; }
+.volcano-icon { color: #d1301f; font-size: 16px; line-height: 18px; text-align: center; text-shadow: 0 0 2px #fff; }
+.heritage-icon { color: #7b3fa0; font-size: 15px; line-height: 18px; text-align: center; text-shadow: 0 0 2px #fff; }

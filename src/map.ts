@@ -3,7 +3,7 @@ import type { Feature, FeatureCollection } from "geojson";
 import type { Info } from "./info";
 import { countryInfo } from "./countries";
 import { cityInfo, loadCities, type City } from "./cities";
-import { namedInfo, loadMountains, mountainInfo, mountainMinZoom, type Mountain } from "./nature";
+import { namedInfo, loadMountains, mountainInfo, mountainMinZoom, loadVolcanoes, volcanoInfo, loadHeritage, heritageInfo, type Mountain, type Volcano, type HeritageSite } from "./nature";
 
 const BASE: L.PathOptions = { color: "#6b7a8c", weight: 1, fillColor: "#e8e0c8", fillOpacity: 0.85 };
 const HOVER: L.PathOptions = { fillColor: "#f4d27a" };
@@ -12,13 +12,15 @@ const SELECTED: L.PathOptions = { fillColor: "#e8913a", weight: 2 };
 export async function createMap(el: HTMLElement, onSelect: (info: Info) => void): Promise<void> {
   const map = L.map(el, { worldCopyJump: true, minZoom: 2 }).setView([30, 10], 2);
   const json = (url: string) => fetch(url).then((r) => r.json());
-  const [data, lakes, ranges, rivers, cities, mountains]: [
+  const [data, lakes, ranges, rivers, cities, mountains, volcanoes, heritage]: [
     FeatureCollection,
     FeatureCollection,
     FeatureCollection,
     FeatureCollection,
     City[],
     Mountain[],
+    Volcano[],
+    HeritageSite[],
   ] = await Promise.all([
     json("./data/countries.geojson"),
     json("./data/lakes.geojson"),
@@ -26,6 +28,8 @@ export async function createMap(el: HTMLElement, onSelect: (info: Info) => void)
     json("./data/rivers.geojson"),
     loadCities(),
     loadMountains(),
+    loadVolcanoes(),
+    loadHeritage(),
   ]);
 
   let selected: L.Path | null = null;
@@ -129,9 +133,29 @@ export async function createMap(el: HTMLElement, onSelect: (info: Info) => void)
       }).on("click", () => select(null, mountainInfo(m))),
   );
 
+  const iconMarker = (lat: number, lon: number, className: string, symbol: string) =>
+    L.marker([lat, lon], {
+      icon: L.divIcon({ className, html: symbol, iconSize: [18, 18] }),
+      bubblingMouseEvents: false,
+    });
+
+  const volcanoLayer = gatedLayer(
+    volcanoes,
+    (v) => v.z,
+    (v) => iconMarker(v.lat, v.lon, "volcano-icon", "▲").on("click", () => select(null, volcanoInfo(v))),
+  );
+
+  const heritageLayer = gatedLayer(
+    heritage,
+    (h) => h.z,
+    (h) => iconMarker(h.lat, h.lon, "heritage-icon", "◆").on("click", () => select(null, heritageInfo(h))),
+  );
+
   const overlays = {
     Städer: cityLayer,
     Bergstoppar: mountainLayer,
+    Vulkaner: volcanoLayer,
+    Världsarv: heritageLayer,
     Bergskedjor: rangeLayer,
     Öknar: desertLayer,
     Regnskogar: rainforestLayer,
