@@ -39,13 +39,12 @@ const literals = async (prop, expr = "?v") => {
   return Object.fromEntries(rows.map((r) => [r.c.split("/").pop(), r.x]));
 };
 
-const [capital, languages, currency, government, tld, area, phone] = await Promise.all([
+const [capital, languages, currency, government, tld, phone] = await Promise.all([
   labels("P36"),
   labels("P37"),
   labels("P38"),
   labels("P122"),
   labels("P78"),
-  literals("P2046", "MAX(?v)"),
   literals("P474"),
 ]);
 
@@ -58,7 +57,6 @@ for (const q of countries) {
     currency: first(currency, q),
     government: first(government, q)[0] ?? null,
     tld: first(tld, q)[0] ?? null,
-    area: area[q] ? Math.round(Number(area[q])) : null,
     phone: phone[q] ?? null,
   };
 }
