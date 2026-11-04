@@ -1,6 +1,5 @@
 import "./style.css";
 import { createMap } from "./map";
-import { toCountry, formatNumber } from "./countries";
 import { fetchSummary } from "./wikipedia";
 
 const panel = document.getElementById("panel")!;
@@ -9,24 +8,27 @@ document.getElementById("panel-close")!.addEventListener("click", () => (panel.h
 
 let current = "";
 
-createMap(document.getElementById("map")!, async (props) => {
-  const c = toCountry(props);
-  current = c.name;
+createMap(document.getElementById("map")!, async (info) => {
+  current = info.name;
   content.innerHTML = `
     <h2></h2>
     <p class="sub"></p>
-    <dl>
-      <dt>Befolkning</dt><dd>${formatNumber(c.population)}</dd>
-      <dt>Ekonomi</dt><dd class="economy"></dd>
-    </dl>
+    <dl></dl>
     <div class="wiki"><p class="muted">Hämtar från Wikipedia …</p></div>`;
-  content.querySelector("h2")!.textContent = c.name;
-  content.querySelector(".sub")!.textContent = `${c.subregion}, ${c.continent}`;
-  content.querySelector(".economy")!.textContent = c.economy;
+  content.querySelector("h2")!.textContent = info.name;
+  content.querySelector(".sub")!.textContent = info.subtitle;
+  const dl = content.querySelector("dl")!;
+  for (const [label, value] of info.facts) {
+    const dt = document.createElement("dt");
+    const dd = document.createElement("dd");
+    dt.textContent = label;
+    dd.textContent = value;
+    dl.append(dt, dd);
+  }
   panel.hidden = false;
 
-  const summary = await fetchSummary(c.name);
-  if (current !== c.name) return;
+  const summary = await fetchSummary(info.wikiTitle);
+  if (current !== info.name) return;
   const wiki = content.querySelector(".wiki")!;
   wiki.replaceChildren();
   if (!summary) {
