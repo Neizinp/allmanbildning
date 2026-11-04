@@ -71,7 +71,6 @@ body { font-family: system-ui, sans-serif; color: #1c2430; }
 .layer-row { display: flex; align-items: center; gap: .5rem; padding: .2rem 0; cursor: pointer; }
 .layer-row input { width: 1rem; height: 1rem; }
 
-.leaflet-bar .home-button { font-size: 20px; line-height: 30px; text-decoration: none; }
 
 /* Wikipedia-läsare */
 #reader {
@@ -111,3 +110,13 @@ body { font-family: system-ui, sans-serif; color: #1c2430; }
   padding: 4px; background: rgba(255, 255, 255, .92); border-radius: 6px; box-shadow: 0 1px 4px rgba(0, 0, 0, .35); object-fit: contain;
 }
 #panel .credit { display: block; margin: 0 0 .75rem; font-size: .7rem; color: #5b6674; }
+
+/* Navigering: plus, minus och hem på en rad */
+.nav-bar { display: flex; }
+.nav-bar a { width: 34px; height: 34px; line-height: 34px; border-bottom: 0; border-right: 1px solid #ccc; }
+.nav-bar a:last-child { border-right: 0; }
+.nav-bar .home-btn { font-size: 20px; text-decoration: none; }
+@media (max-width: 699px) {
+  .nav-bar .zoom-btn { display: none; }
+  .nav-bar .home-btn { border-radius: 4px; }
+}

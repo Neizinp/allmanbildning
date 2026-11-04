@@ -4,7 +4,7 @@ import type { Info } from "./info";
 import { versioned } from "./versioned";
 import { countryInfo, type CountryFacts } from "./countries";
 import { addLayerControl } from "./layer-control";
-import { addHomeControl } from "./home-control";
+import { addNavControl } from "./nav-control";
 import { cityInfo, loadCities, type City } from "./cities";
 import { countyInfo, provinceInfo, type CountyProps, type ProvinceProps, namedInfo, loadMountains, mountainInfo, mountainMinZoom, loadVolcanoes, volcanoInfo, loadHeritage, heritageInfo, type Mountain, type Volcano, type HeritageSite } from "./nature";
 
@@ -23,7 +23,12 @@ export async function createMap(
   onSelect: (info: Info) => void,
   onClear: () => void,
 ): Promise<() => void> {
-  const map = L.map(el, { worldCopyJump: true, minZoom: 2 }).setView([30, 10], 2);
+  const map = L.map(el, { worldCopyJump: true, zoomControl: false, zoomSnap: 0.25 }).setView([30, 10], 2);
+  // Hela världen utan Antarktis; minsta zoom anpassas så att den får plats även på en smal mobilskärm.
+  const worldBounds = L.latLngBounds([-58, -175], [82, 180]);
+  const fitMinZoom = () => map.setMinZoom(map.getBoundsZoom(worldBounds));
+  fitMinZoom();
+  map.on("resize", fitMinZoom);
   const json = (url: string) => fetch(versioned(url)).then((r) => r.json());
   const [data, lakes, ranges, rivers, cities, mountains, volcanoes, heritage]: [
     FeatureCollection,
@@ -199,7 +204,7 @@ export async function createMap(
     (h) => iconMarker(h.lat, h.lon, "heritage-icon", "◆").on("click", () => select(null, heritageInfo(h))),
   );
 
-  addHomeControl(map, countryLayer.getBounds());
+  addNavControl(map, worldBounds);
   addLayerControl(map, [
     { title: "Platser", layers: { Städer: cityLayer, Världsarv: heritageLayer, Vulkaner: volcanoLayer, Bergstoppar: mountainLayer } },
     {
@@ -220,7 +225,7 @@ export async function createMap(
     },
   ]);
 
-  map.fitBounds(countryLayer.getBounds());
+  map.fitBounds(worldBounds);
   if (import.meta.env.DEV) (window as unknown as { __map: L.Map }).__map = map;
   return clear;
 }
