@@ -3,3 +3,4 @@ dist
 *.local
 scripts/.wikidata-cache.json
 scripts/.river-cache.json
+scripts/.facts-cache.json
