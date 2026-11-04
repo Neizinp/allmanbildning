@@ -48,14 +48,32 @@ const [capital, languages, currency, government, tld, phone] = await Promise.all
   literals("P474"),
 ]);
 
+// Några statsskick saknar svensk etikett i Wikidata.
+const GOVERNMENT = {
+  presidentialism: "Presidentiell republik",
+  semipresidentialism: "Semipresidentiell republik",
+  federation: "Federation",
+  "super-presidential republic": "Superpresidentiell republik",
+  "overseas collectivity of France": "Franskt utomeuropeiskt territorium",
+};
+// Teckenspråk, kreoler och specialvarianter är sällan det man söker i en ledtråd.
+const MINOR_LANGUAGE = /teckenspråk|sign language|legal french|taglish|creole|^standard /i;
+const mainLanguages = (list) => {
+  const main = list.filter((l) => !MINOR_LANGUAGE.test(l));
+  return main.length ? main : list;
+};
+
 const first = (o, q, n = 1) => (o[q] ? [...new Set(o[q])].slice(0, n) : []);
 const facts = {};
 for (const q of countries) {
   facts[q] = {
     capital: first(capital, q, 2),
-    languages: first(languages, q, 3),
+    languages: mainLanguages(languages[q] ?? []).slice(0, 3),
     currency: first(currency, q),
-    government: first(government, q)[0] ?? null,
+    government: (() => {
+      const g = first(government, q)[0];
+      return g ? (GOVERNMENT[g] ?? g) : null;
+    })(),
     tld: first(tld, q)[0] ?? null,
     phone: phone[q] ?? null,
   };
