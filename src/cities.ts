@@ -1,4 +1,5 @@
 import type { Info } from "./info";
+import { versioned } from "./versioned";
 import { formatNumber } from "./countries";
 
 export interface City {
@@ -14,7 +15,7 @@ export interface City {
   z: number;
 }
 
-export const loadCities = async (): Promise<City[]> => (await fetch("./data/cities.json")).json();
+export const loadCities = async (): Promise<City[]> => (await fetch(versioned("./data/cities.json"))).json();
 
 export const cityInfo = (c: City): Info => ({
   name: c.name,

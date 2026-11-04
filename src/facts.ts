@@ -1,3 +1,4 @@
+import { versioned } from "./versioned";
 export interface Person {
   name: string;
   title: string;
@@ -20,7 +21,7 @@ export interface Facts {
 let all: Promise<Record<string, Facts>> | null = null;
 
 export async function loadFacts(qid: string): Promise<Facts | null> {
-  all ??= fetch("./data/facts.json")
+  all ??= fetch(versioned("./data/facts.json"))
     .then((r) => r.json())
     .catch(() => ({}));
   return (await all)[qid] ?? null;

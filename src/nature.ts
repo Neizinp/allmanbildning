@@ -1,4 +1,5 @@
 import type { Info } from "./info";
+import { versioned } from "./versioned";
 import { formatNumber } from "./countries";
 
 export interface Mountain {
@@ -9,7 +10,7 @@ export interface Mountain {
   elevation: number;
 }
 
-export const loadMountains = async (): Promise<Mountain[]> => (await fetch("./data/mountains.json")).json();
+export const loadMountains = async (): Promise<Mountain[]> => (await fetch(versioned("./data/mountains.json"))).json();
 
 export const mountainInfo = (m: Mountain): Info => ({
   name: m.name,
@@ -43,6 +44,8 @@ export interface ProvinceProps {
   landsdel: string;
   djur: string | null;
   blomma: string | null;
+  pop: number | null;
+  popYear: number | null;
   vapen: string | null;
   foto: string | null;
   fotoFil: string | null;
@@ -52,6 +55,7 @@ export const provinceInfo = (p: ProvinceProps): Info => ({
   name: p.name,
   subtitle: `Landskap i ${p.landsdel}`,
   facts: [
+    ...(p.pop ? ([["Befolkning", `${formatNumber(p.pop)}${p.popYear ? ` (${p.popYear})` : ""}`]] as [string, string][]) : []),
     ...(p.djur ? ([["Landskapsdjur", p.djur]] as [string, string][]) : []),
     ...(p.blomma ? ([["Landskapsblomma", p.blomma]] as [string, string][]) : []),
   ],
@@ -91,7 +95,7 @@ export interface HeritageSite {
   z: number;
 }
 
-const loadJson = <T>(file: string): Promise<T> => fetch(`./data/${file}.json`).then((r) => r.json());
+const loadJson = <T>(file: string): Promise<T> => fetch(versioned(`./data/${file}.json`)).then((r) => r.json());
 export const loadVolcanoes = () => loadJson<Volcano[]>("volcanoes");
 export const loadHeritage = () => loadJson<HeritageSite[]>("heritage");
 

@@ -5,6 +5,8 @@ export interface LayerGroupSpec {
   layers: Record<string, L.Layer>;
   // Högst ett lager i gruppen kan vara tänt samtidigt.
   exclusive?: boolean;
+  // Körs när ett lager i gruppen tänds.
+  onEnable?: () => void;
 }
 
 const STORAGE_KEY = "hiddenLayers";
@@ -83,6 +85,7 @@ class LayerControl extends L.Control {
           }
           apply(box);
           persist();
+          if (input.checked) group.onEnable?.();
         });
       }
     }

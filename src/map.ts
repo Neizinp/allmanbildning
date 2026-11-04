@@ -1,6 +1,7 @@
 import L from "leaflet";
 import type { Feature, FeatureCollection } from "geojson";
 import type { Info } from "./info";
+import { versioned } from "./versioned";
 import { countryInfo, type CountryFacts } from "./countries";
 import { addLayerControl } from "./layer-control";
 import { addHomeControl } from "./home-control";
@@ -23,7 +24,7 @@ export async function createMap(
   onClear: () => void,
 ): Promise<() => void> {
   const map = L.map(el, { worldCopyJump: true, minZoom: 2 }).setView([30, 10], 2);
-  const json = (url: string) => fetch(url).then((r) => r.json());
+  const json = (url: string) => fetch(versioned(url)).then((r) => r.json());
   const [data, lakes, ranges, rivers, cities, mountains, volcanoes, heritage]: [
     FeatureCollection,
     FeatureCollection,
@@ -213,7 +214,10 @@ export async function createMap(
         Landformer: landformLayer,
       },
     },
-    { title: "Sverige", layers: { Län: countyLayer, Landskap: provinceLayer }, exclusive: true },
+    { title: "Sverige", layers: { Län: countyLayer, Landskap: provinceLayer },
+      exclusive: true,
+      onEnable: () => map.fitBounds(countyLayer.getBounds(), { padding: [20, 20] }),
+    },
   ]);
 
   map.fitBounds(countryLayer.getBounds());
