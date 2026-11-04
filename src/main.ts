@@ -1,7 +1,6 @@
 import "./style.css";
 import { createMap } from "./map";
 import type { Info } from "./info";
-import { initGame } from "./game/game";
 import { fetchSummary } from "./wikipedia";
 import { loadFacts, wikiUrl, lifespan, type Facts } from "./facts";
 
@@ -126,7 +125,4 @@ const hideInfo = () => {
   current = "";
 };
 
-createMap(document.getElementById("map")!, showInfo, hideInfo).then((api) => {
-  clearSelection = api.clear;
-  initGame(api, showInfo, hideInfo);
-});
+createMap(document.getElementById("map")!, showInfo, hideInfo).then((clear) => (clearSelection = clear));

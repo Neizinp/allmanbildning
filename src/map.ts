@@ -5,7 +5,6 @@ import { countryInfo, type CountryFacts } from "./countries";
 import { addLayerControl } from "./layer-control";
 import { addHomeControl } from "./home-control";
 import { cityInfo, loadCities, type City } from "./cities";
-import type { GameData, Target } from "./game/types";
 import { namedInfo, loadMountains, mountainInfo, mountainMinZoom, loadVolcanoes, volcanoInfo, loadHeritage, heritageInfo, type Mountain, type Volcano, type HeritageSite } from "./nature";
 
 const BASE: L.PathOptions = {
@@ -18,22 +17,11 @@ const BASE: L.PathOptions = {
 const HOVER: L.PathOptions = { fillColor: "#f4d27a" };
 const SELECTED: L.PathOptions = { fillColor: "#e8913a", weight: 2 };
 
-export interface MapApi {
-  clear: () => void;
-  data: GameData;
-  enterGame: (onGuess: (latlng: L.LatLng) => void) => void;
-  exitGame: () => void;
-  showCities: (show: boolean) => void;
-  reveal: (target: Target, guess: L.LatLng | null) => void;
-  resetAnswer: () => void;
-  home: () => void;
-}
-
 export async function createMap(
   el: HTMLElement,
   onSelect: (info: Info) => void,
   onClear: () => void,
-): Promise<MapApi> {
+): Promise<() => void> {
   const map = L.map(el, { worldCopyJump: true, minZoom: 2 }).setView([30, 10], 2);
   const json = (url: string) => fetch(url).then((r) => r.json());
   const [data, lakes, ranges, rivers, cities, mountains, volcanoes, heritage]: [
@@ -71,8 +59,7 @@ export async function createMap(
     selected = null;
     onClear();
   };
-  let gameHandler: ((latlng: L.LatLng) => void) | null = null;
-  map.on("click", (e) => (gameHandler ? gameHandler(e.latlng) : clear()));
+  map.on("click", clear);
   document.addEventListener("keydown", (e) => e.key === "Escape" && clear());
 
   const countryPaths = new Map<string, L.Path>();
@@ -84,10 +71,7 @@ export async function createMap(
       path.on({
         mouseover: () => path !== selected && path.setStyle(HOVER),
         mouseout: () => path !== selected && countryLayer.resetStyle(path),
-        click: (e) =>
-          gameHandler
-            ? gameHandler(e.latlng)
-            : select(path, countryInfo(feature.properties ?? {}, countryFacts[feature.properties?.WIKIDATAID])),
+        click: () => select(path, countryInfo(feature.properties ?? {}, countryFacts[feature.properties?.WIKIDATAID])),
       });
     },
   }).addTo(map);
@@ -165,7 +149,7 @@ export async function createMap(
         fillColor: c.capital ? "#c0392b" : "#2c3e50",
         fillOpacity: 1,
         bubblingMouseEvents: false,
-      }).on("click", () => (gameHandler ? gameHandler(L.latLng(c.lat, c.lon)) : select(null, cityInfo(c)))),
+      }).on("click", () => select(null, cityInfo(c))),
   );
 
   const mountainLayer = gatedLayer(
@@ -196,8 +180,7 @@ export async function createMap(
     (h) => iconMarker(h.lat, h.lon, "heritage-icon", "◆").on("click", () => select(null, heritageInfo(h))),
   );
 
-  const counties: FeatureCollection = await json("./data/sweden-counties.geojson");
-  const countyLayer = L.geoJSON(counties, {
+  const countyLayer = L.geoJSON((await json("./data/sweden-counties.geojson")) as FeatureCollection, {
     style: { color: "#7d8a99", weight: 1, dashArray: "4 3", fill: false },
     interactive: false,
   }).addTo(map);
@@ -220,87 +203,7 @@ export async function createMap(
     { title: "Sverige", layers: { Län: countyLayer } },
   ]);
 
-  const overlays: L.Layer[] = [
-    cityLayer,
-    heritageLayer,
-    volcanoLayer,
-    mountainLayer,
-    rangeLayer,
-    desertLayer,
-    rainforestLayer,
-    lakeLayer,
-    riverLayer,
-    marineLayer,
-    landformLayer,
-    countyLayer,
-  ];
-  let hiddenByGame: L.Layer[] = [];
-  const answerLayer = L.layerGroup().addTo(map);
-
-  const resetAnswer = () => {
-    answerLayer.clearLayers();
-    resetCountry(selected);
-    selected = null;
-  };
-
-  const reveal = (target: Target, guess: L.LatLng | null) => {
-    resetAnswer();
-    const points: L.LatLngExpression[] = [];
-    if (target.kind === "country") {
-      const path = countryPaths.get(target.qid) as L.Polygon | undefined;
-      if (path) {
-        selected = path;
-        path.setStyle(SELECTED);
-        const bounds = path.getBounds();
-        points.push(bounds.getSouthWest(), bounds.getNorthEast());
-      }
-    } else {
-      const { lat, lon, name } = target.city;
-      L.circleMarker([lat, lon], { radius: 9, color: "#fff", weight: 2, fillColor: "#c0392b", fillOpacity: 1, interactive: false })
-        .bindTooltip(name, { permanent: true, direction: "top" })
-        .addTo(answerLayer);
-      points.push([lat, lon]);
-    }
-    if (guess) {
-      L.circleMarker(guess, { radius: 6, color: "#fff", weight: 2, fillColor: "#475569", fillOpacity: 1, interactive: false }).addTo(answerLayer);
-      if (target.kind === "city") {
-        L.polyline([guess, [target.city.lat, target.city.lon]], { color: "#475569", weight: 2, dashArray: "6 6", interactive: false }).addTo(answerLayer);
-        points.push(guess);
-      }
-    }
-    if (points.length) map.fitBounds(L.latLngBounds(points), { maxZoom: 7, padding: [60, 60] });
-  };
-
-  const enterGame = (onGuess: (latlng: L.LatLng) => void) => {
-    clear();
-    gameHandler = onGuess;
-    hiddenByGame = overlays.filter((l) => map.hasLayer(l));
-    for (const l of hiddenByGame) map.removeLayer(l);
-    document.body.classList.add("game-mode");
-  };
-
-  const showCities = (show: boolean) => (show ? map.addLayer(cityLayer) : map.removeLayer(cityLayer));
-
-  const exitGame = () => {
-    gameHandler = null;
-    resetAnswer();
-    for (const l of overlays) map.removeLayer(l);
-    for (const l of hiddenByGame) map.addLayer(l);
-    hiddenByGame = [];
-    document.body.classList.remove("game-mode");
-    map.fitBounds(countryLayer.getBounds());
-  };
-
   map.fitBounds(countryLayer.getBounds());
   if (import.meta.env.DEV) (window as unknown as { __map: L.Map }).__map = map;
-  return {
-    clear,
-    enterGame,
-    exitGame,
-    showCities,
-    reveal,
-    resetAnswer,
-    home: () => map.fitBounds(countryLayer.getBounds()),
-    data: { countries: data.features, countryFacts, cities, heritage, volcanoes, mountains, counties: counties.features },
-  };
+  return clear;
 }
