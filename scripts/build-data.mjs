@@ -1,5 +1,7 @@
 // Bygger public/data/*.json från Natural Earth och slår upp svenska Wikipedia-titlar via Wikidata.
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import jpeg from "jpeg-js";
 import { sleep, sparql, wikiJson } from "./wikidata.mjs";
 
 const NE = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson";
@@ -331,7 +333,8 @@ async function wikidataPlaces(pattern, minSitelinks, extra = "") {
       OPTIONAL { ?item wdt:P17 ?c. ?c rdfs:label ?countryLabel. FILTER(LANG(?countryLabel) = "sv") }
       ${extra}
     } GROUP BY ?item`);
-  return rows.map((r) => ({
+  // Koordinater på andra himlakroppar har ett globsprefix före "Point(".
+  return rows.filter((r) => r.pt.startsWith("Point(")).map((r) => ({
     name: displayName(r.ttl),
     title: r.ttl,
     ...parsePoint(r.pt),
@@ -365,8 +368,63 @@ const roundTo = (n, d) => {
 };
 const roundDeep = (c, d) => (typeof c[0] === "number" ? c.map((n) => roundTo(n, d)) : c.map((x) => roundDeep(x, d)));
 
+const SATELLITE = "scripts/.bluemarble.jpg";
+const SATELLITE_URL = "https://raw.githubusercontent.com/vasturiano/three-globe/master/example/img/earth-blue-marble.jpg";
+
+async function loadSatellite() {
+  if (!existsSync(SATELLITE)) await writeFile(SATELLITE, Buffer.from(await (await fetch(SATELLITE_URL)).arrayBuffer()));
+  return jpeg.decode(await readFile(SATELLITE), { useTArray: true });
+}
+
+const inRing = (x, y, ring) => {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+};
+
+// Ytvägt medelvärde av satellitbildens landpixlar inuti landets polygoner.
+function averageColor(geometry, img) {
+  const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
+  const sum = [0, 0, 0, 0];
+  const all = [0, 0, 0, 0];
+  for (const poly of polygons) {
+    const outer = poly[0];
+    const xs = outer.map((c) => c[0]);
+    const ys = outer.map((c) => c[1]);
+    const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+    const step = Math.max(Math.sqrt(((x1 - x0) * (y1 - y0)) / 3000), 0.005);
+    for (let y = y0 + step / 2; y < y1; y += step) {
+      for (let x = x0 + step / 2; x < x1; x += step) {
+        if (!inRing(x, y, outer) || poly.slice(1).some((h) => inRing(x, y, h))) continue;
+        const px = Math.min(img.width - 1, Math.floor(((x + 180) / 360) * img.width));
+        const py = Math.min(img.height - 1, Math.floor(((90 - y) / 180) * img.height));
+        const i = (py * img.width + px) * 4;
+        const [r, g, b] = [img.data[i], img.data[i + 1], img.data[i + 2]];
+        const w = step * step * Math.cos((y * Math.PI) / 180);
+        const water = b > r * 1.3 && b > g * 1.05 && r + g + b < 360;
+        for (const acc of water ? [all] : [all, sum]) {
+          acc[0] += r * w;
+          acc[1] += g * w;
+          acc[2] += b * w;
+          acc[3] += w;
+        }
+      }
+    }
+  }
+  const acc = sum[3] > 0 ? sum : all;
+  if (acc[3] === 0) return null;
+  // Lyft något mot vitt så att färgerna fungerar som kartfyllnad.
+  const hex = (v) => Math.round((v / acc[3]) * 0.75 + 255 * 0.25).toString(16).padStart(2, "0");
+  return `#${hex(acc[0])}${hex(acc[1])}${hex(acc[2])}`;
+}
+
 // Världen i 50m-upplösning, men Sverige (och grannarna, så att gränserna passar) i 10m med Gotland och Öland.
 async function buildWorld() {
+  const satellite = await loadSatellite();
   const world = await load("ne_50m_admin_0_countries");
   const detailed = new Map((await load("ne_10m_admin_0_countries")).features.map((f) => [f.properties.ISO_A2_EH, f]));
   const features = world.features.map((f) => {
@@ -376,7 +434,7 @@ async function buildWorld() {
     const digits = iso === "SE" ? 3 : 2;
     return {
       type: "Feature",
-      properties: pickProps(f.properties),
+      properties: { ...pickProps(f.properties), COLOR: averageColor(geometry.geometry, satellite) },
       geometry: { type: geometry.geometry.type, coordinates: roundDeep(geometry.geometry.coordinates, digits) },
     };
   });

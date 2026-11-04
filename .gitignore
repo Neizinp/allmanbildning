@@ -4,3 +4,4 @@ dist
 scripts/.wikidata-cache.json
 scripts/.river-cache.json
 scripts/.facts-cache.json
+scripts/.bluemarble.jpg

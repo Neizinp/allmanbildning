@@ -55,7 +55,7 @@ const parseEvents = (rows) =>
   rows.map((r) => ({ name: cleanName(r.t), title: r.t, year: r.y ? Number(r.y) : null })).sort((a, b) => (a.year ?? 0) - (b.year ?? 0));
 
 const countries = JSON.parse(await readFile("public/data/countries.geojson", "utf8")).features.map((f) => f.properties.WIKIDATAID);
-const cities = JSON.parse(await readFile("public/data/cities.json", "utf8")).filter((c) => c.z <= 3).map((c) => c.qid);
+const cities = JSON.parse(await readFile("public/data/cities.json", "utf8")).filter((c) => c.z <= 3 || c.country === "Sverige").map((c) => c.qid);
 const ids = [...new Set([...countries, ...cities].filter(Boolean))];
 
 const tasks = [];
