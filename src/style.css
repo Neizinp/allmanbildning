@@ -72,3 +72,32 @@ body { font-family: system-ui, sans-serif; color: #1c2430; }
 .layer-row input { width: 1rem; height: 1rem; }
 
 .leaflet-bar .home-button { font-size: 20px; line-height: 30px; text-decoration: none; }
+
+/* Wikipedia-läsare */
+#reader {
+  position: absolute; z-index: 1200; background: #fff; box-shadow: 0 2px 16px rgba(0, 0, 0, .35);
+  overflow-y: auto; line-height: 1.55;
+}
+#reader[hidden] { display: none; }
+#reader header {
+  position: sticky; top: 0; display: flex; justify-content: space-between; align-items: center; gap: .5rem;
+  padding: .6rem 1rem; background: #f4f6f8; border-bottom: 1px solid #d5dae0;
+}
+#reader header button {
+  border: 1px solid #c9d1da; background: #fff; border-radius: 8px; padding: .3rem .7rem; font: inherit; cursor: pointer;
+}
+#reader header a { font-size: .85rem; }
+#reader-body { padding: .5rem 1.25rem 1.5rem; }
+#reader h2 { margin: .5rem 0; }
+#reader h3 { margin: 1.25rem 0 .3rem; font-size: 1.05rem; }
+#reader h4 { margin: 1rem 0 .2rem; font-size: .95rem; }
+#reader p { margin: .5rem 0; }
+#reader .muted { color: #5b6674; }
+#reader img { display: block; max-width: 100%; max-height: 260px; border-radius: 8px; margin: .5rem 0; }
+
+@media (min-width: 700px) {
+  #reader { top: 1rem; right: 1rem; bottom: 1rem; width: 480px; border-radius: 12px; }
+}
+@media (max-width: 699px) {
+  #reader { left: 0; right: 0; bottom: 0; top: 4rem; border-radius: 16px 16px 0 0; }
+}

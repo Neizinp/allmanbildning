@@ -2,7 +2,8 @@ import "./style.css";
 import { createMap } from "./map";
 import type { Info } from "./info";
 import { fetchSummary } from "./wikipedia";
-import { loadFacts, wikiUrl, lifespan, type Facts } from "./facts";
+import { loadFacts, lifespan, type Facts } from "./facts";
+import { closeReader, wikiLink } from "./reader";
 
 const panel = document.getElementById("panel")!;
 const content = document.getElementById("panel-content")!;
@@ -10,15 +11,6 @@ let clearSelection = () => {};
 document.getElementById("panel-close")!.addEventListener("click", () => clearSelection());
 
 let current = "";
-
-function wikiLink(title: string, text: string) {
-  const a = document.createElement("a");
-  a.href = wikiUrl(title);
-  a.target = "_blank";
-  a.rel = "noopener";
-  a.textContent = text;
-  return a;
-}
 
 function renderFacts(el: Element, facts: Facts) {
   const section = (heading: string, items: HTMLElement[]) => {
@@ -111,16 +103,12 @@ const showInfo = async (info: Info) => {
   }
   const p = document.createElement("p");
   p.textContent = summary.extract;
-  const a = document.createElement("a");
-  a.href = summary.url;
-  a.target = "_blank";
-  a.rel = "noopener";
-  a.textContent = "Läs mer på Wikipedia";
+  const a = wikiLink(info.wikiTitle, "Läs mer på Wikipedia");
   wiki.append(p, a);
-
 };
 
 const hideInfo = () => {
+  closeReader();
   panel.hidden = true;
   current = "";
 };
