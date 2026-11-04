@@ -79,6 +79,32 @@ const showInfo = async (info: Info) => {
     image.replaceChildren(img);
   };
   if (info.flagUrl) showImage(info.flagUrl, `Flagga: ${info.name}`, "flag");
+  if (info.photoUrl) {
+    const wrap = document.createElement("div");
+    wrap.className = "photo-wrap";
+    const photo = document.createElement("img");
+    photo.src = info.photoUrl;
+    photo.alt = info.name;
+    photo.className = "photo";
+    wrap.append(photo);
+    if (info.crestUrl) {
+      const crest = document.createElement("img");
+      crest.src = info.crestUrl;
+      crest.alt = `Landskapsvapen: ${info.name}`;
+      crest.className = "crest";
+      wrap.append(crest);
+    }
+    image.replaceChildren(wrap);
+    if (info.photoCredit) {
+      const credit = document.createElement("a");
+      credit.className = "credit";
+      credit.href = info.photoCredit;
+      credit.target = "_blank";
+      credit.rel = "noopener";
+      credit.textContent = "Foto: Wikimedia Commons";
+      image.append(credit);
+    }
+  }
   panel.hidden = false;
 
   if (info.qid) {

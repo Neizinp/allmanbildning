@@ -103,3 +103,11 @@ body { font-family: system-ui, sans-serif; color: #1c2430; }
 }
 
 .leaflet-interactive:focus { outline: none; }
+
+#panel .photo-wrap { position: relative; }
+#panel .image .photo-wrap .photo { margin-bottom: .25rem; }
+#panel .image .crest {
+  position: absolute; left: .5rem; bottom: .75rem; height: 76px; width: auto; max-width: 64px; margin: 0;
+  padding: 4px; background: rgba(255, 255, 255, .92); border-radius: 6px; box-shadow: 0 1px 4px rgba(0, 0, 0, .35); object-fit: contain;
+}
+#panel .credit { display: block; margin: 0 0 .75rem; font-size: .7rem; color: #5b6674; }

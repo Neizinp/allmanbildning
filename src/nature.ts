@@ -41,14 +41,24 @@ export interface ProvinceProps {
   name: string;
   title: string;
   landsdel: string;
+  djur: string | null;
+  blomma: string | null;
+  vapen: string | null;
+  foto: string | null;
+  fotoFil: string | null;
 }
 
 export const provinceInfo = (p: ProvinceProps): Info => ({
   name: p.name,
   subtitle: `Landskap i ${p.landsdel}`,
-  facts: [],
+  facts: [
+    ...(p.djur ? ([["Landskapsdjur", p.djur]] as [string, string][]) : []),
+    ...(p.blomma ? ([["Landskapsblomma", p.blomma]] as [string, string][]) : []),
+  ],
   wikiTitle: p.title,
-  showWikiImage: true,
+  photoUrl: p.foto ?? undefined,
+  photoCredit: p.fotoFil ? `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(p.fotoFil.replaceAll(" ", "_"))}` : undefined,
+  crestUrl: p.vapen ?? undefined,
 });
 
 export const namedInfo =

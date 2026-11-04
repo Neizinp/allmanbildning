@@ -5,6 +5,9 @@ export interface Info {
   wikiTitle: string;
   qid?: string;
   flagUrl?: string;
+  photoUrl?: string;
+  photoCredit?: string;
+  crestUrl?: string;
   showWikiImage?: boolean;
   hideIntro?: boolean;
 }
