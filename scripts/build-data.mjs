@@ -231,6 +231,35 @@ async function buildRivers() {
   console.log("rivers", out.length, "av", names.length);
 }
 
+// Natural Earth saknar regnskogar, så dessa är handritade grova avgränsningar.
+const RAINFORESTS = [
+  { name: "Amazonas regnskog", titles: ["Amazonas regnskog", "Amazonas"], ring: [[-79,-5],[-75,1],[-70,4],[-62,5],[-52,4],[-50,0],[-48,-2],[-50,-6],[-55,-9],[-60,-12],[-64,-14],[-70,-13],[-75,-10]] },
+  { name: "Kongobäckenets regnskog", titles: ["Kongobäckenet", "Kongoregnskogen"], ring: [[9,2],[12,3],[16,3],[20,4],[26,4],[29,1],[30,-3],[27,-6],[22,-6],[17,-5],[13,-4],[10,-1]] },
+  { name: "Borneos regnskog", titles: ["Borneos regnskog", "Borneo"], ring: [[109,1],[111,2],[115,4.5],[118,5.5],[119,1.5],[117,-1.5],[115,-3.5],[111,-3],[109.5,-1]] },
+  { name: "Sumatras regnskog", titles: ["Sumatras regnskog", "Sumatra"], ring: [[95,5],[98,4],[103,0],[105,-3],[104,-5.5],[101,-3],[98,0]] },
+  { name: "Nya Guineas regnskog", titles: ["Nya Guineas regnskog", "Nya Guinea"], ring: [[131,-1],[135,-2.5],[141,-2.7],[147,-6],[150,-10],[143,-9],[138,-8],[134,-4]] },
+];
+
+async function buildRainforests() {
+  const features = [];
+  for (const r of RAINFORESTS) {
+    const url =
+      "https://sv.wikipedia.org/w/api.php?action=query&format=json&formatversion=2&redirects=1&titles=" +
+      encodeURIComponent(r.titles.join("|"));
+    const q = (await wikiJson(url)).query;
+    const existing = new Set(q.pages.filter((p) => !p.missing).map((p) => p.title));
+    const redirects = new Map((q.redirects ?? []).map((x) => [x.from, x.to]));
+    const title = r.titles.map((t) => redirects.get(t) ?? t).find((t) => existing.has(t)) ?? r.name;
+    console.log(r.name, "->", title);
+    features.push({
+      type: "Feature",
+      properties: { name: r.name, title, kind: "Regnskog" },
+      geometry: { type: "Polygon", coordinates: [[...r.ring, r.ring[0]]] },
+    });
+  }
+  await writeFile("public/data/rainforests.geojson", JSON.stringify({ type: "FeatureCollection", features }));
+}
+
 const only = process.argv[2];
 if (!only || only === "cities") await buildCities();
 if (!only || only === "lakes") await buildLakes();
@@ -240,3 +269,4 @@ if (!only || only === "rivers") await buildRivers();
 if (!only || only === "deserts") await buildDeserts();
 if (!only || only === "landforms") await buildLandforms();
 if (!only || only === "marine") await buildMarine();
+if (!only || only === "rainforests") await buildRainforests();
