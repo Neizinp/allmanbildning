@@ -31,6 +31,7 @@ const CITIZENSHIP_ALIASES = {
 
 const PEOPLE_EXCLUSIONS = {
   Q41: ["Q2263"], // Tom Hanks' honorary Greek citizenship is not representative of Greek nationality.
+  Q403: ["Q483382"], // Steve Wozniak acquired Serbian citizenship in 2023; it is not representative of Serbian nationality.
 };
 
 const peopleQuery = (prop, qid, limit, minLinks) => {
