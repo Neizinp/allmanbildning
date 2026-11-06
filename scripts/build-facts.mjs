@@ -29,15 +29,26 @@ const CITIZENSHIP_ALIASES = {
   Q35: ["Q756617"],
 };
 
-const peopleQuery = (prop, qid, limit, minLinks) => `
+const PEOPLE_EXCLUSIONS = {
+  Q41: ["Q2263"], // Tom Hanks' honorary Greek citizenship is not representative of Greek nationality.
+};
+
+const peopleQuery = (prop, qid, limit, minLinks) => {
+  const excluded = PEOPLE_EXCLUSIONS[qid] ?? [];
+  const exclusionFilter = excluded.length
+    ? `FILTER(?p NOT IN (${excluded.map((q) => "wd:" + q).join(", ")}))`
+    : "";
+  return `
   SELECT ?p (SAMPLE(?ttl) AS ?t) (MAX(?links) AS ?l) (SAMPLE(?by) AS ?b) (SAMPLE(?dy) AS ?d) (SAMPLE(?desc) AS ?ds) WHERE {
     VALUES ?place { ${[qid, ...(prop === "P27" ? [...(PREDECESSORS[qid] ?? []), ...(CITIZENSHIP_ALIASES[qid] ?? [])] : [])].map((q) => "wd:" + q).join(" ")} }
     ?p wdt:${prop} ?place; wdt:P31 wd:Q5; wikibase:sitelinks ?links. FILTER(?links >= ${minLinks})
+    ${exclusionFilter}
     ?a schema:about ?p; schema:isPartOf ${SV}; schema:name ?ttl.
     OPTIONAL { ?p wdt:P569 ?bd. BIND(YEAR(?bd) AS ?by) }
     OPTIONAL { ?p wdt:P570 ?dd. BIND(YEAR(?dd) AS ?dy) }
     OPTIONAL { ?p schema:description ?desc. FILTER(LANG(?desc) = "sv") }
   } GROUP BY ?p ORDER BY DESC(?l) LIMIT ${limit}`;
+};
 
 const eventsQuery = (prop, qid, limit, minLinks) => `
   SELECT ?e (SAMPLE(?ttl) AS ?t) (MAX(?links) AS ?l) (MIN(YEAR(?date)) AS ?y) WHERE {
