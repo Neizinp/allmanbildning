@@ -25,9 +25,13 @@ const PREDECESSORS = {
   Q145: ["Q174193", "Q179876"],
 };
 
+const CITIZENSHIP_ALIASES = {
+  Q35: ["Q756617"],
+};
+
 const peopleQuery = (prop, qid, limit, minLinks) => `
   SELECT ?p (SAMPLE(?ttl) AS ?t) (MAX(?links) AS ?l) (SAMPLE(?by) AS ?b) (SAMPLE(?dy) AS ?d) (SAMPLE(?desc) AS ?ds) WHERE {
-    VALUES ?place { ${[qid, ...(prop === "P27" ? (PREDECESSORS[qid] ?? []) : [])].map((q) => "wd:" + q).join(" ")} }
+    VALUES ?place { ${[qid, ...(prop === "P27" ? [...(PREDECESSORS[qid] ?? []), ...(CITIZENSHIP_ALIASES[qid] ?? [])] : [])].map((q) => "wd:" + q).join(" ")} }
     ?p wdt:${prop} ?place; wdt:P31 wd:Q5; wikibase:sitelinks ?links. FILTER(?links >= ${minLinks})
     ?a schema:about ?p; schema:isPartOf ${SV}; schema:name ?ttl.
     OPTIONAL { ?p wdt:P569 ?bd. BIND(YEAR(?bd) AS ?by) }
